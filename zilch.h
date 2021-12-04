@@ -15,6 +15,7 @@
 #include <climits>
 #include <unistd.h>
 #include <term.h>
+#include <optional>
 
 #if defined(_WIN32)
     #define PLATFORM_NAME "windows" // Windows
@@ -67,18 +68,51 @@ public:
     static unsigned roll() ;
     static void rollSixDice( zilch& ) ;
 
-    /*******************************
-    *   DUMMY CHECKING FUNCTIONS   *
-    *******************************/
-    static bool straitBool( const zilch& ) ;
-    static bool setBool( const zilch& ) ;
-    static bool desiredMultipleAvailabilityBool ( const zilch&, unsigned ) ; // Previously mValPass
-    static bool multiplesBool( const zilch& ) ;
-    static bool multiplesAddBool( const zilch& ) ;
-    static bool singleBool( const zilch&, unsigned ) ;
-    static bool bust50Bool( const zilch& ) ;
-    static bool winBool( zilch& ) ;
-    static bool availableOptionBool( zilch& );
+    /*********************************
+    *   DUMMY CHECKING FUNCTIONS     *
+    *********************************/
+    bool straitBool()
+    {
+        return (diceSetMap.size() == 6);
+    }
+    bool setBool()
+    {
+        return (diceSetMap.size() == 3 && !straitBool() && !multiplesBool() &&
+                !std::any_of(diceSetMap.begin(), diceSetMap.end(), [](const auto &die) { return die.second != 2; }));
+    }
+    ///   Checks to verify that the Multiple the User wants is available   ///
+    bool desiredMultipleAvailabilityBool ( unsigned desiredMultiple )
+    {
+        return ( std::any_of(diceSetMap.begin(), diceSetMap.end(), [desiredMultiple](const auto & die) { return die.first == desiredMultiple && die.second >= 3; }) );
+    }
+    ///   Checks to verify that Multiples exist   ///
+    bool multiplesBool()
+    {
+        return ( std::any_of(diceSetMap.begin(), diceSetMap.end(), [](const auto & die) { return die.second >= 3; }) );
+    }
+    bool multiplesAddBool()
+    {
+        return ( std::any_of(diceSetMap.begin(), diceSetMap.end(), [this](const auto & die) { return die.first == getValOfChosenMultiple(); }) );
+    }
+    bool singleBool( unsigned single )
+    {
+        return ( std::any_of(diceSetMap.begin(), diceSetMap.end(), [single](const auto & die) { return die.first == single; }) );
+    }
+    [[nodiscard]] bool bust50Bool() const
+    {
+        return (bust50 != 0);
+    }
+    bool winBool()
+    {
+        for (unsigned i = 0; i < getAmountOfPlayers(); i++ )
+            if (permanentScore[getCurrentPlayer()] >= getScoreLimit())
+                return true;
+        return false;
+    }
+    bool availableOptionBool()
+    {
+        return straitBool() || setBool() || multiplesBool() || singleBool(1) || zilch::singleBool(5) || zilch::multiplesAddBool();
+    }
 
     /****************************************
     *   CHECKING AND OUTPUTTING FUNCTIONS   *
@@ -105,7 +139,7 @@ public:
     /***************************
     *   Aesthetics Functions   *
     ***************************/
-    static void pauseAndContinue ( zilch&, unsigned) ;
+    static void pauseAndContinue ( zilch&, bool = false) ;
     static void showDice( zilch& );
     static void clear();
     static void printInstructions( zilch&, printOptions );
@@ -115,45 +149,50 @@ public:
     ****************************/
 
     ///   Game Size ( Number of Dice ) Functions   ///
-    unsigned getNumOfDiceInPlay() const
+    [[nodiscard]] unsigned getNumOfDiceInPlay() const
     {
         return static_cast<unsigned>(numOfDiceInPlay);
     }
     void setNumOfDiceInPlay (long numOfDice = -20 )
     {
-        repeat:
-        for (const auto die : diceSetMap)
-            if (die.second == 0) {
-                diceSetMap.erase(die.first);
-                goto repeat;
-            }
+        bool repeat;
+        do {
+            repeat = false;
+            for (const auto die: diceSetMap)
+                if (die.second == 0) {
+                    diceSetMap.erase(die.first);
+                    repeat = true;
+                    break;
+                }
+        } while (repeat);
+
 
         if ( numOfDice > 6 )
             numOfDiceInPlay = 6;
-        else if (numOfDice == -20)
+        else if (numOfDice == -20) // Recount the number of dice available
         {
             numOfDiceInPlay = 0;
             for (const auto die : diceSetMap)
                 numOfDiceInPlay += die.second;
         }
-        else if ( numOfDice < 0 ) {
-            if (abs(numOfDice) <= numOfDiceInPlay)
-                numOfDiceInPlay += numOfDice;
-            else numOfDiceInPlay = 6;
+        else if ( numOfDice < 0 ) { // (-1) Subtract or reset dice
+            numOfDiceInPlay = (abs(numOfDice) <= numOfDiceInPlay) ? numOfDiceInPlay + numOfDice : 6;
         }
-        else if ( ( numOfDice == 0 ) || ( numOfDice == 6 ) )
+        else if ( ( numOfDice == 0 ) || ( numOfDice == 6 ) ) // New roll or new turn
         {
             setValOfChosenMultiple(0);
-            if (getScoreFromMultiples() != 0) {
-                setTurnScores(getScoreFromMultiples() + getScoreFromSingles());
-            }
+
+            setTurnScores(getScoreFromMultiples() + getScoreFromSingles());
             numOfDiceInPlay = numOfDice;
         }
         else numOfDiceInPlay = numOfDice;
+
+        if (numOfDice == 6)
+            setContinueTurnBool(true);
     }
 
     ///   Global Variable to keep track of current player   ///
-    std::string getCurrentPlayer() const
+    [[nodiscard]] std::string getCurrentPlayer() const
     {
         return currentPlayer;
     }
@@ -168,10 +207,29 @@ public:
                 currentPlayer = (i == players.size() - 1) ? players.at(0) : players.at(i + 1);
                 break;
             }
+        setContinueTurnBool(true);
+    }
+
+    ///   Initialize Map Sizes/Resize   ///
+    void initializeMaps()
+    {
+        scoreFromSingles.clear();
+        scoreFromMultiples.clear();
+        turnScore.clear();
+        permanentScore.clear();
+        for (const auto & player : players){
+            scoreFromSingles[player] = 0;
+            scoreFromMultiples[player] = 0;
+            turnScore[player] = 0;
+            permanentScore[player] = 0;
+        }
+
+        if (scoreFromSingles.size() != amountOfPlayers || scoreFromMultiples.size() != amountOfPlayers || turnScore.size() != amountOfPlayers || permanentScore.size() != amountOfPlayers)
+            throw std::length_error("Score maps are incorrectly sized, Line: " + std::to_string(__LINE__));
     }
 
     ///   Global Variable for knowing the multiple add-on choice   ///
-    unsigned getValOfChosenMultiple() const
+    [[nodiscard]] unsigned getValOfChosenMultiple() const
     {
         return valOfChosenMultiple;
     }
@@ -181,7 +239,7 @@ public:
     }
 
     ///   More a debugging function than anything   ///
-    unsigned getValOfAvailableMultiple() const
+    [[nodiscard]] unsigned getValOfAvailableMultiple() const
     {
         return valOfAvailableMultiple;
     }
@@ -191,7 +249,7 @@ public:
     }
 
     ///   Global Variable for Accessing the Amount of Players   ///
-    unsigned getAmountOfPlayers() const
+    [[nodiscard]] unsigned getAmountOfPlayers() const
     {
         return amountOfPlayers;
     }
@@ -204,7 +262,7 @@ public:
     }
 
     ///   Global Variable for Accessing the Amount of Players   ///
-    unsigned getScoreLimit() const
+    [[nodiscard]] unsigned getScoreLimit() const
     {
         return scoreLimit;
     }
@@ -219,7 +277,7 @@ public:
     }
 
     ///      ///
-    bool getOptionSelectedBool() const
+    [[nodiscard]] bool getOptionSelectedBool() const
     {
         return optionSelected;
     }
@@ -229,25 +287,56 @@ public:
     }
 
     ///      ///
-    bool getContinueSelectingBool() const
+    [[nodiscard]] bool getContinueSelectingBool() const
     {
         return continueSelecting;
     }
     void setContinueSelectingBool(bool val)
     {
+        if (!val && !getOptionSelectedBool()) {
+            std::cout << "You must select at least one option" << std::endl;
+            val = true;
+        }
         continueSelecting = val;
     }
 
-    ///   scoreFromSingles Functions SCORE   ///
-    unsigned getScoreFromMultiples()
+    ///      ///
+    [[nodiscard]] bool getContinueTurnBool() const
     {
-        return scoreFromMultiples[getCurrentPlayer()];
+        return continueTurn;
     }
-    void setScoreFromMultiples( unsigned val )
+    void setContinueTurnBool(bool val, bool bust = false)
     {
-        scoreFromMultiples[getCurrentPlayer()] = ( val == 0 ) ? 0 :
-                                                 ( val < 10 ) ? scoreFromMultiples[getCurrentPlayer()] * static_cast<unsigned>(pow(2,val)) : val;
+        if (!val && !bust) {
+            ///   Greater than or equal to 1000: log and end turn   ///
+            if (getRunningScore() >= 1000) {
+
+                ///   Selective Aesthetic   ///
+                //pauseAndContinue(game, 0);
+
+                ///   Update Scores   ///
+                setTurnScores(getScoreFromSingles() + getScoreFromMultiples());
+
+                ///   Log and end turn   ///
+                setPermanentScore(getTurnScore());
+                std::cout << std::endl << getCurrentPlayer()
+                          << "'s permanent score has been logged and is now: "
+                          << getPermanentScore() << std::endl << std::endl;
+                setNumOfDiceInPlay(0);
+            }
+
+                ///   else if: No option selected and not above 1000: select an option   ///
+            else if (!getOptionSelectedBool()) {
+                std::cout << "You are not allowed to end without a permanent or running score higher than 1000" << std::endl;
+                val = true;
+                //zilch::pauseAndContinue(game, 1 );
+                //printInstructions(game, REENTER);
+            } /// else continueSelecting = false, roll again
+        } else if (val && bust) [[unlikely]] val = false;
+        continueTurn = val;
     }
+
+    ///   scoreFromSingles Functions   ///
     unsigned getScoreFromSingles()
     {
         return scoreFromSingles[getCurrentPlayer()];
@@ -257,13 +346,20 @@ public:
         scoreFromSingles[getCurrentPlayer()] = (val == 0 ) ? 0 : scoreFromSingles[getCurrentPlayer()] + val;
     }
 
-    ///   scoreFromSingles Functions   ///
-
+    ///   scoreFromMultiples Functions   ///
+    unsigned getScoreFromMultiples()
+    {
+        return scoreFromMultiples[getCurrentPlayer()];
+    }
+    void setScoreFromMultiples( unsigned val )
+    {
+        scoreFromMultiples[getCurrentPlayer()] = ( val == 0 ) ? 0 : ( val < 10 ) ? scoreFromMultiples[getCurrentPlayer()] * static_cast<unsigned>(pow(2,val)) : val;
+    }
 
     ///   Running and Turn Score   ///
     unsigned getRunningScore()
     {
-        unsigned runningScore = permanentScore[getCurrentPlayer()] + scoreFromSingles[getCurrentPlayer()] + scoreFromMultiples[getCurrentPlayer()];
+        unsigned runningScore = permanentScore[getCurrentPlayer()] + turnScore[getCurrentPlayer()] + scoreFromSingles[getCurrentPlayer()] + scoreFromMultiples[getCurrentPlayer()];
         return runningScore;
     }
     unsigned getTurnScore()
@@ -272,7 +368,7 @@ public:
     }
     void setTurnScores(unsigned val)
     {
-        turnScore[getCurrentPlayer()] = (val == 0) ? 0 : turnScore[getCurrentPlayer()] + val;
+        turnScore[getCurrentPlayer()] = (val == 0 || (scoreFromMultiples[getCurrentPlayer()] == 0 && scoreFromSingles[getCurrentPlayer()] == 0)) ? 0 : turnScore[getCurrentPlayer()] + val;
         setScoreFromSingles(0);
         setScoreFromMultiples(0);
     }
@@ -292,11 +388,11 @@ public:
     }
 
     ///  Gets the Highest Score   ///
-    static std::string getHighestScoringPlayer( zilch& game) {
+    std::string getHighestScoringPlayer() {
         std::string playerWithHighestScore;
-        for ( const auto & player : game.getPlayers())
-            for ( const auto & player2 : game.getPlayers())
-                if (game.getPermanentScore( player2 ) > game.getPermanentScore( player ) )
+        for ( const auto & player : getPlayers())
+            for ( const auto & player2 : getPlayers())
+                if (getPermanentScore( player2 ) > getPermanentScore( player ) )
                     playerWithHighestScore = player2;
         return playerWithHighestScore;
     }
@@ -333,6 +429,7 @@ private:
     unsigned scoreLimit = 2000;
     bool optionSelected = false;
     bool continueSelecting = true;
+    bool continueTurn = true;
     std::map<unsigned, unsigned> diceSetMap;
     std::map<std::string, unsigned> scoreFromSingles; // This is used as the general turn score when logging or the score other than that of multiples during regular turn operation
     std::map<std::string, unsigned> scoreFromMultiples;

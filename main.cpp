@@ -5,7 +5,7 @@
 */
 
 /*
-* FIXME: When using get functions in for loops assign them to a variable to avoid multiple calls
+* When using get functions in for loops assign them to a variable to avoid multiple calls
 */
 
 using namespace std;
@@ -32,7 +32,7 @@ int main()
     cin >> scoreLimit;
 
     ///   Verify a valid input   ///
-    while ( cin.fail() || ( scoreLimit < 1000 ) )
+    while ( cin.fail() || scoreLimit < 1000 )
     {
         zilch::clear();
         cout << "Enter the desired score limit: ";
@@ -43,7 +43,7 @@ int main()
 
 
     ///   Input amount of players and failsafe   ///
-    cout << "Enter the amount of people who are playing: ";
+    cout << "Enter the amount of people who are playing: " << flush;
     cin >> numPlayers;
 
     ///   Verify a valid input   ///
@@ -59,7 +59,7 @@ int main()
 
 
     ///   Initialize play   ///
-    game.setScoreLimit(scoreLimit);             // Score limit
+    game.setScoreLimit(scoreLimit);                   // Score limit
     game.setAmountOfPlayers(numPlayers);
     game.setNumOfDiceInPlay(FULL_SET_OF_DICE);  // Full set of dice
 
@@ -67,15 +67,15 @@ int main()
     ///   Input Players   ///
     for ( unsigned i = 0; i < numPlayers; i++ )
     {
-        ( i == 0 ) ? cout << "\nInput your first player: " : cout << "Input your next player: ";
+        ( i == 0 ) ? cout << "\nInput your first player: " << flush : cout << "Input your next player: " << flush;
         cin >> player;
 
         game.setPlayer( i, player);
-        game.setCurrentPlayer(player);
-        game.setTurnScores(0);            // Each Player has a Starting Turn, Singles, and Multiples Score of 0
+        game.setTurnScores(0);                  // Each Player has a Starting Turn, Singles, and Multiples Score of 0
         game.setPermanentScore(0, true);   // Each Player has a Starting Score of 0
     }
     game.setCurrentPlayer(game.getPlayer(0));
+    game.initializeMaps();
 
 
     ///   Output Player Names and Scores   ///
@@ -83,15 +83,16 @@ int main()
     for ( unsigned i = 0; i < numPlayers; i++ )
         cout << game.getPlayer( i) << "\tStarting Score: " << game.getRunningScore() << endl << flush;
 
-    zilch::pauseAndContinue(game, 0);
+    zilch::pauseAndContinue(game );
     zilch::clear();
 
     /***********************************
     *    Rolling and Scoring people    *
     ***********************************/
-    while ( !zilch::winBool(game) )
+    while ( !game.winBool() )
     {
-        while (( (game.getTurnScore() != 0)  || game.getNumOfDiceInPlay() == FULL_SET_OF_DICE) && game.getPermanentScore(game.getCurrentPlayer()) < scoreLimit)
+        game.setContinueTurnBool(true);
+        while (game.getContinueTurnBool() && (game.getPermanentScore(game.getCurrentPlayer()) < game.getScoreLimit() ))
             zilch::rollSixDice(game);
 
         ///   Player Exceeded Score Limit   ///
@@ -99,14 +100,14 @@ int main()
             break;
 
         ///   Continue to next player   ///
-        game.incCurrentPlayer();
+        game.incCurrentPlayer(); // Also sets continueTurnBool to true
         cout << "\nIt is " << game.getCurrentPlayer() << "'s turn" << endl;
         game.setNumOfDiceInPlay( FULL_SET_OF_DICE);
 
         ///   Print all players' scores   ///
         for ( unsigned i = 0; i < numPlayers; i++ )
             cout << game.getPlayer( i ) << "\tCurrent Score: " << game.getPermanentScore( game.getPlayer( i ) ) << endl << flush;
-        zilch::pauseAndContinue(game, 0 ); // FIXME: This one causes formatting problems sometimes (when going from the last player back to the first)
+        zilch::pauseAndContinue( game );
     }
 
     ///   Last Turn Function   ///

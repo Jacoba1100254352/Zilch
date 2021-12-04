@@ -28,7 +28,7 @@ void zilch::rollSixDice( zilch& game )
         game.diceSetMap[roll]++;
     }
 
-    std::cout << "\nThe dice have been rolled" << std::endl;
+    //std::cout << "\nThe dice have been rolled" << std::endl;
 
     /// Run checks on what is possible to play   ///
     zilch::check(game);
@@ -40,26 +40,28 @@ void zilch::rollSixDice( zilch& game )
 void zilch::check( zilch& game )
 {
     //   if no options are available: else:
-    if ( !availableOptionBool(game) )
-        if ( game.getNumOfDiceInPlay() == 6 && !zilch::bust50Bool(game) && game.getScoreFromSingles() == 0 ) // if bust on first roll without previous busts on the first roll
+    if ( !game.availableOptionBool() )
+        if ( game.getNumOfDiceInPlay() == 6 && !game.bust50Bool() && game.getTurnScore() == 0 ) // if bust on first roll without previous busts on the first roll
         {
-            std::cout << "You have busted on the first roll, try again" << std::endl;
+            zilch::showDice(game);
+            std::cout << "\nYou have busted on the first roll, try again" << std::endl;
             game.setScoreFromSingles(50);
-            zilch::pauseAndContinue(game, 1 ); // 1 displays current score
+            zilch::pauseAndContinue(game, true );
         }
         else if ( game.getNumOfDiceInPlay() >= 1 ) // bust
         {
             zilch::showDice(game);
-            std::cout << "You have busted" << std::endl;
+            std::cout << "\nYou have busted" << std::endl;
             game.setNumOfDiceInPlay(0);
-            game.setScoreFromSingles(0);
-            zilch::pauseAndContinue(game, 0);
+            game.setTurnScores(0); // This may not be needed
+            game.setContinueTurnBool(false, true);
+            zilch::pauseAndContinue(game);
         }
         else // reset the dice for the next roll on the same turn set
         {
-            std::cout << "You have a full set of dice now" << std::endl;
+            std::cout << "\nYou have a full set of dice now" << std::endl;
             game.setNumOfDiceInPlay( 6 );
-            zilch::pauseAndContinue(game, 1 );
+            zilch::pauseAndContinue(game, true );
         }
     else zilch::checkingUserInput(game); // Checks for a well ended turn (Options are available)
 }
@@ -68,22 +70,23 @@ void zilch::check( zilch& game )
 *   UNUSED FINDING FUNCTIONS   *
 *******************************/
 void zilch::checkingUserInput( zilch& game )
-{ // FIXME: the losing player can't chose "re-roll" instead they can only end???
+{
     ///   Variable Defaults   ///
     unsigned playOrEndTurn = 0;
 
-    ///   Handle Multiples   ///
-    updateValOfAvailableMultiples(game);
-    if (zilch::multiplesAddBool(game) && (game.getScoreFromMultiples() >= 200))
-        std::cout << "You can add to your multiple of " << game.getValOfChosenMultiple() << "!\n";
-
     ///   Count Down for Options Chosen   ///
     do {
+        zilch::clear();
+
+        ///   Handle Multiples   ///
+        updateValOfAvailableMultiples(game);
+        if (game.multiplesAddBool() && (game.getScoreFromMultiples() >= 200))
+            std::cout << "You can add to your multiple of " << game.getValOfChosenMultiple() << "!\n";
 
         ///   Output   ///
         if (!game.getOptionSelectedBool())
             zilch::printInstructions(game, ENTER);
-        else if (zilch::availableOptionBool(game))
+        else if (game.availableOptionBool())
             zilch::printInstructions(game, NEXT);
         else break;
 
@@ -91,167 +94,68 @@ void zilch::checkingUserInput( zilch& game )
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<int>::max(), '\n');
         std::cin >> game;
-        zilch::clear();
 
-        ///   if: Score above 1000: check for highest player   ///
+        ///   if: Score above 1000: allow the user to end turn and check for highest player   ///
         if (game.getRunningScore() >= 1000) {
             ///   Calculate high score   ///
-            unsigned highestScore = game.getPermanentScore(zilch::getHighestScoringPlayer(game));
+            unsigned highestScore = game.getPermanentScore(game.getHighestScoringPlayer());
 
-            ///   if: High score below limit: Ask to end or keep playing   ///
-            if (highestScore < game.getScoreLimit()) {
-                std::cout << "\n" << game.getCurrentPlayer() << "'s current score: " << game.getRunningScore()
-                          << "\nType 1 to keep playing or 0 to end your turn: ";
-                std::cin >> playOrEndTurn;
-
-                ///   Verify a valid input   ///
-                while ( std::cin.fail() )
-                {
-                    zilch::clear();
-                    std::cout << "Type 1 to keep playing or 0 to end your turn: ";
-                    std::cin.clear();
-                    std::cin.ignore ( std::numeric_limits<int>::max(), '\n' );
-                    std::cin >> playOrEndTurn;
-                }
-
-                game.setContinueSelectingBool(playOrEndTurn != 0); // No need for goto now, if 0, set to false
-                //system("clear");
-            }
+            ///   if: High permanent score below limit: Ask to end or keep playing   ///
+            if (highestScore < game.getScoreLimit())
+                std::cout << "\n" << game.getCurrentPlayer() << "'s current score: " << game.getRunningScore();
 
             ///   else if: Someone has surpassed the limit: try to beat them   ///
-            else if (highestScore > game.getRunningScore()) { // If the current player is not the highest scoring player and is less than the highest score
+            else if (highestScore > game.getRunningScore()) // If the current player is not the highest scoring player and is less than the highest score
                 std::cout << "\n\nYour current score of " << game.getRunningScore() << " is " << highestScore - game.getRunningScore()
-                          << " less than " << zilch::getHighestScoringPlayer(game) << "'s High Score of " << highestScore
+                          << " less than " << game.getHighestScoringPlayer() << "'s High Score of " << highestScore
                           << " so keep going! :)" << std::endl;
-            }
 
             ///   else if: Tied for the highest   ///
-            else if (zilch::getHighestScoringPlayer(game) != game.getCurrentPlayer()) {
-                std::cout << "You are currently tied with the highest scoring player!" << std::endl
-                          << "Type 1 to keep playing or 0 to end your turn: ";
-                std::cin >> playOrEndTurn;
-
-                ///   Verify a valid input   ///
-                while ( std::cin.fail() )
-                {
-                    zilch::clear();
-                    std::cout << "Type 1 to keep playing or 0 to end your turn: ";
-                    std::cin.clear();
-                    std::cin.ignore ( std::numeric_limits<int>::max(), '\n' );
-                    std::cin >> playOrEndTurn;
-                }
-
-                game.setContinueSelectingBool(playOrEndTurn != 0); // No need for goto now, if 0, set to false
-            }
+            else if (game.getHighestScoringPlayer() != game.getCurrentPlayer())
+                std::cout << "You are currently tied with the highest scoring player!";
 
             ///   else: You are the highest! Ask to end or keep playing   ///
-            else {
-                std::cout << "You are currently the highest scoring player" << std::endl
-                          << "Type 1 to keep playing or 0 to end your turn: ";
+            else std::cout << "You are currently the highest scoring player";
+
+
+            if (highestScore < game.getScoreLimit() || (highestScore >= game.getScoreLimit() && game.getRunningScore() >= highestScore)){
+                (game.availableOptionBool()) ? std::cout << "\nType 2 to end turn, 1 to continue selecting or 0 to roll again: " << std::flush
+                                             : std::cout << "\nType 2 to end turn or 0 to roll again: " << std::flush;
+                std::cin.clear();
+                std::cin.ignore ( std::numeric_limits<int>::max(), '\n' );
                 std::cin >> playOrEndTurn;
 
                 ///   Verify a valid input   ///
-                while ( std::cin.fail() )
+                while ( std::cin.fail() || playOrEndTurn < 0 || 2 < playOrEndTurn )
                 {
                     zilch::clear();
-                    std::cout << "Type 1 to keep playing or 0 to end your turn: ";
+                    std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
                     std::cin.clear();
                     std::cin.ignore ( std::numeric_limits<int>::max(), '\n' );
                     std::cin >> playOrEndTurn;
                 }
 
-                game.setContinueSelectingBool(playOrEndTurn != 0); // No need for goto now, if 0, set to false
-                //system("clear");
+                game.setContinueTurnBool(playOrEndTurn != 2);
+                game.setContinueSelectingBool(playOrEndTurn == 1 );
+                zilch::clear();
             }
         }
 
         ///   Below the limit without options (bust or re-roll)   ///
-        else if (!zilch::availableOptionBool(game)) {
+        else if (!game.availableOptionBool()) {
             zilch::clear();
+            zilch::showDice(game);
             std::cout << "\nThere are no options left";
+            zilch::pauseAndContinue(game);
+            //game.setContinueSelectingBool(game, false); // This might be less efficient than break, even game.setContinueTurnBool(false) might be the best option here?
             break;
         }
 
-        ///   Chose not to continue   ///
-        if (!game.getContinueSelectingBool()) {
+    } while (game.getContinueTurnBool() && game.getContinueSelectingBool() && game.availableOptionBool());
 
-            ///   Greater than or equal to 1000: log and end turn   ///
-            if (game.getRunningScore() >= 1000) {
-
-                ///   Selective Aesthetic   ///
-                if (playOrEndTurn != 0)
-                    zilch::pauseAndContinue(game, 0);
-
-                ///   Log and end turn   ///
-                game.setPermanentScore(game.getTurnScore());
-                std::cout << std::endl << game.getCurrentPlayer()
-                          << "'s permanent score has been logged and is now: "
-                          << game.getPermanentScore() << std::endl << std::endl;
-                game.setNumOfDiceInPlay(0);
-                break;
-            }
-
-            ///   else if: Option selected: roll again   ///
-            else if (game.getOptionSelectedBool())  break;
-
-            ///   else: No option selected and not above 1000: select an option   ///
-            else {
-                std::cout << "You are not allowed to end without a permanent score higher than 1000" << std::endl;
-                game.setContinueSelectingBool(true);
-                //zilch::pauseAndContinue(game, 1 );
-                zilch::printInstructions(game, REENTER);
-            }
-        } // else, roll again
-    } while (game.getContinueSelectingBool() && zilch::availableOptionBool(game));
+    /// Should I move the update permanant score and to outside of here to be handled in main only if the runningScore is greater than permanant (where turnScore is set to 0 here if a bust)
 
     /// NOTE: From here it goes back to the while loop in main
-}
-
-
-/*********************************
-*   DUMMY CHECKING FUNCTIONS     *
-*********************************/
-bool zilch::straitBool( const zilch& game )
-{
-    return (game.diceSetMap.size() == 6);
-}
-bool zilch::setBool( const zilch& game )
-{
-    return (game.diceSetMap.size() == 3 && !zilch::straitBool(game) && !zilch::multiplesBool(game) &&
-            !std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [](const auto &die) { return die.second != 2; }));
-}
-///   Checks to verify that the Multiple the User wants is available   ///
-bool zilch::desiredMultipleAvailabilityBool ( const zilch& game, unsigned desiredMultiple )
-{
-    return ( std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [desiredMultiple](const auto & die) { return die.first == desiredMultiple && die.second >= 3; }) );
-}
-///   Checks to verify that Multiples exist   ///
-bool zilch::multiplesBool( const zilch& game )
-{
-    return ( std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [](const auto & die) { return die.second >= 3; }) );
-}
-bool zilch::multiplesAddBool( const zilch& game )
-{
-    return ( std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [&game](const auto & die) { return die.first == game.getValOfChosenMultiple(); }) );
-}
-bool zilch::singleBool( const zilch& game, unsigned single )
-{
-    return ( std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [single](const auto & die) { return die.first == single; }) );
-}
-bool zilch::bust50Bool( const zilch& game )
-{
-    return (game.bust50 != 0);
-}
-bool zilch::winBool( zilch& game )
-{
-    for (unsigned i = 0; i < game.getAmountOfPlayers(); i++ )
-        if (game.permanentScore[game.getCurrentPlayer()] >= game.getScoreLimit())
-            return true;
-    return false;
-}
-bool zilch::availableOptionBool( zilch& game )
-{
-    return zilch::straitBool(game) || zilch::setBool(game) || zilch::multiplesBool(game) || zilch::singleBool(game, 1) || zilch::singleBool(game, 5) || zilch::multiplesAddBool(game);
 }
 
 
@@ -260,7 +164,7 @@ bool zilch::availableOptionBool( zilch& game )
 ****************************************/
 void zilch::straits( zilch& game )
 {
-    if ( !game.straitBool(game) )
+    if ( !game.straitBool() )
         return;
 
     //system ( "clear" );
@@ -270,8 +174,7 @@ void zilch::straits( zilch& game )
 }
 void zilch::set( zilch& game )
 {
-    game.getNumOfDiceInPlay();
-    if ( !game.setBool(game) )
+    if ( !game.setBool() )
         return;
 
     //system ( "clear" );
@@ -280,10 +183,10 @@ void zilch::set( zilch& game )
     game.setOptionSelectedBool(true);
 }
 void zilch::multiple ( zilch& game, const unsigned VAL_OF_DESIRED_MULTIPLE ) {
-    if (!game.desiredMultipleAvailabilityBool(game, VAL_OF_DESIRED_MULTIPLE) && game.getValOfAvailableMultiple() == 0)
+    if (!game.desiredMultipleAvailabilityBool(VAL_OF_DESIRED_MULTIPLE) && game.getValOfAvailableMultiple() == 0)
         return;
 
-    if (multiplesBool(game)) {
+    if (game.multiplesBool()) {
         unsigned valFromPrevChosenMultiples = 0; /// This keeps track if a there are two possible sets example: 111666
         if (game.getValOfChosenMultiple() != 0)
             valFromPrevChosenMultiples = game.getScoreFromMultiples();
@@ -303,7 +206,7 @@ void zilch::multiple ( zilch& game, const unsigned VAL_OF_DESIRED_MULTIPLE ) {
         ///   This should solve the problem of the scores form two multiples sets (e.g. 111666) not adding   ///
         if (valFromPrevChosenMultiples > 0)
             game.setScoreFromMultiples(game.getScoreFromMultiples() + valFromPrevChosenMultiples);
-    } else if (multiplesAddBool(game)) {
+    } else if (game.multiplesAddBool()) {
 
         ///   Check for the Correct number of Multiples   ///
         if ((game.getScoreFromMultiples() < 200) || (game.diceSetMap[VAL_OF_DESIRED_MULTIPLE] > 3))
@@ -312,9 +215,7 @@ void zilch::multiple ( zilch& game, const unsigned VAL_OF_DESIRED_MULTIPLE ) {
         ///   .   ///
         if (std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [VAL_OF_DESIRED_MULTIPLE](const auto &die) { return die.first == VAL_OF_DESIRED_MULTIPLE; })) // Avoids inadvertently adding new value to the map
             game.setScoreFromMultiples(game.diceSetMap[VAL_OF_DESIRED_MULTIPLE]);
-    } else {
-        return;
-    }
+    } else return;
 
     ///   Gets rid of the chosen multiples   ///
     game.diceSetMap[VAL_OF_DESIRED_MULTIPLE] = 0;
@@ -324,7 +225,7 @@ void zilch::multiple ( zilch& game, const unsigned VAL_OF_DESIRED_MULTIPLE ) {
 void zilch::single ( zilch& game, unsigned val )
 {
     ///    Verify option validity   ///
-    if ( !((val == 1 && zilch::singleBool(game, val)) || (val == 5 && zilch::singleBool(game, 5))) )
+    if ( !((val == 1 && game.singleBool(val)) || (val == 5 && game.singleBool(5))) )
         return;
 
     ///   Automatically use multiples if available, calculate additional multiples, or use singles   ///
@@ -358,9 +259,9 @@ void zilch::lastTurnOpportunity( zilch& game, const unsigned FULL_SET_OF_DICE )
     ///   Initialize Variables   ///
     std::string gameEndingPlayer = game.getCurrentPlayer(); // sets to current player so that every other player has 1 more turn
 
-    std::cout << gameEndingPlayer << " is over " << game.getScoreLimit() << std::endl
-              << "Everyone else has one more chance to win" << std::endl << std::flush;
-    zilch::pauseAndContinue(game, 0); // FIXME: This one also causes formatting issues
+    std::cout << gameEndingPlayer << " is over " << game.getScoreLimit()
+              << "\nEveryone else has one more chance to win" << std::endl;
+    zilch::pauseAndContinue(game);
     std::cout << "\n" << std::endl;
 
     game.incCurrentPlayer();
@@ -370,7 +271,7 @@ void zilch::lastTurnOpportunity( zilch& game, const unsigned FULL_SET_OF_DICE )
         std::cout << "It is " << game.getCurrentPlayer() << "'s last turn" << std::endl;
         game.setNumOfDiceInPlay( FULL_SET_OF_DICE );
 
-        while ((game.getTurnScore() != 0) || game.getNumOfDiceInPlay() == FULL_SET_OF_DICE) // TurnScore is 0 upon bust or start, and numDice is 6 at start
+        while (game.getContinueTurnBool())
             game.rollSixDice(game);
 
         game.incCurrentPlayer();
@@ -381,7 +282,7 @@ void zilch::tiedEnding( zilch& game )
 {
     ///   Variable Declarations   ///
     unsigned tieCounter = 0;
-    std::string playerWithHighestScore = zilch::getHighestScoringPlayer(game);
+    std::string playerWithHighestScore = game.getHighestScoringPlayer();
     unsigned highestScore = game.getPermanentScore( playerWithHighestScore ); // Sets a variable with the highest score
     std::vector<std::string> tie;
     tie.resize(game.getAmountOfPlayers() );
@@ -412,10 +313,9 @@ void zilch::tiedEnding( zilch& game )
 /***************************
 *   Aesthetics Functions   *
 ***************************/
-void zilch::pauseAndContinue ( zilch& game, unsigned val)
+void zilch::pauseAndContinue ( zilch& game, bool showCurrentScore)
 {
     std::cout << "\nPress enter to continue ..." << std::flush;
-    //std::cin.get();
     if(strcmp(PLATFORM_NAME, "windows") > 0) {
         system("pause"); // For Windows users
         system("cls");
@@ -433,7 +333,7 @@ void zilch::pauseAndContinue ( zilch& game, unsigned val)
         putp( tigetstr( (char*)"clear" ) );
     }
 
-    if ( val == 1 )
+    if ( showCurrentScore )
         std::cout << game.getCurrentPlayer() << "'s current score: " << game.getRunningScore() << std::endl;
 }
 void zilch::showDice( zilch& game )
@@ -475,7 +375,7 @@ void zilch::printInstructions( zilch& game, zilch::printOptions options )
                       << ((game.getOptionSelectedBool()) ? (game.getRunningScore() >= 1000)
                             ? "Enter the option you wish to take, or type 0 to end your turn: "
                             : "Enter the option you wish to take, or type 0 to roll again: "
-                            : "Enter the option you wish to take: ");
+                            : "Enter the option you wish to take: ") << std::flush;
             break;
 
         case zilch::NEXT:
@@ -483,7 +383,7 @@ void zilch::printInstructions( zilch& game, zilch::printOptions options )
                       << ((game.getOptionSelectedBool()) ? (game.getRunningScore() >= 1000)
                             ? "Please enter your next choice, or type 0 to end your turn: "
                             : "Please enter your next choice, or type 0 to roll again: "
-                            : "Please enter your next choice: ");
+                            : "Please enter your next choice: ") << std::flush;
             break;
 
         case zilch::REENTER:
@@ -491,7 +391,7 @@ void zilch::printInstructions( zilch& game, zilch::printOptions options )
                       << ((game.getOptionSelectedBool()) ? (game.getRunningScore() >= 1000)
                             ? "Please re-enter the option you wish to take, or type 0 to end your turn: "
                             : "Please re-enter the option you wish to take, or type 0 to roll again: "
-                            : "Please re-enter the option you wish to take: ");
+                            : "Please re-enter the option you wish to take: ") << std::flush;
             break;
 
         default:
@@ -511,22 +411,22 @@ std::istream& operator>> (std::istream& input, zilch& game)
     input >> ch;
 
 
-    while ( ( ch == ' ' ) || ( ( ch != 's' ) && ( ch != 't' ) && ( ch != 'e' ) && ( ch != '1' ) && ( ch != '5' ) && ( ch != 'a' ) && ( ch != 'm' ) && ( ch != '0' ) && ( ch != '?' ) ) )
+    while ( ( ch == ' ' ) || ( ( ch != 's' ) && ( ch != 't' ) && ( ch != 'e' ) && ( ch != 'l' ) && ( ch != '1' ) && ( ch != '5' ) && ( ch != 'a' ) && ( ch != 'm' ) && ( ch != '0' ) && ( ch != '?' ) ) )
         input >> ch;
 
     switch ( ch )
     {
         case 's':
             input >> ch;
-            if (( ch == 't' ) && game.straitBool(game))
+            if (( ch == 't' ) && game.straitBool())
                 game.straits(game);
-            else if (( ch == 'e' ) && game.setBool(game))
+            else if (( ch == 'e' ) && game.setBool())
                 game.set(game);
             else
             {
-                if (( ch == '1' ) && game.singleBool(game, 1))
+                if (( ch == '1' ) && game.singleBool(1))
                     game.single(game, 1);
-                else if (( ch == '5') && game.singleBool(game, 5))
+                else if (( ch == '5') && game.singleBool(5))
                     game.single(game, 5);
                 else {
                     game.clear();
@@ -536,10 +436,32 @@ std::istream& operator>> (std::istream& input, zilch& game)
             break;
 
         case 'a':
+            input >> ch;
+            if (input.fail()) {
+                input.clear();
+                input.ignore ( std::numeric_limits<int>::max(), '\n' );
+                [[fallthrough]];
+            } else if ( ch == 'l') {
+                while (game.availableOptionBool()) {
+                    if (game.straitBool())
+                        game.straits(game);
+                    if (game.setBool())
+                        game.set(game);
+                    for (int i = 1; i <= 6; i++)
+                        if ((game.multiplesBool() && game.desiredMultipleAvailabilityBool(i)) // Multiples available
+                            || ((game.getScoreFromMultiples() >= 200) && (game.getValOfChosenMultiple() == i) && (game.multiplesAddBool()))) // Adding multiples available
+                            game.multiple(game, i);
+                    if (game.singleBool(1))
+                        game.single(game, 1);
+                    if (game.singleBool(5))
+                        game.single(game, 5);
+                }
+                break;
+            }
         case 'm':
             input >> val;
-            if ((game.multiplesBool(game) && game.desiredMultipleAvailabilityBool(game, val)) // Multiples available
-            || ((game.getScoreFromMultiples() >= 200) && (game.getValOfChosenMultiple() == val) && (game.multiplesAddBool(game)))) // Adding multiples available
+            if ((game.multiplesBool() && game.desiredMultipleAvailabilityBool(val)) // Multiples available
+            || ((game.getScoreFromMultiples() >= 200) && (game.getValOfChosenMultiple() == val) && (game.multiplesAddBool()))) // Adding multiples available
                 game.multiple(game, val);
             else
             {
@@ -559,7 +481,7 @@ std::istream& operator>> (std::istream& input, zilch& game)
         case '0':
             if (game.getOptionSelectedBool())
                 game.setContinueSelectingBool(false);
-            else if ((game.getRunningScore() >= 1000 ) && game.availableOptionBool(game))
+            else if ((game.getRunningScore() >= 1000 ) && game.availableOptionBool())
             {
                 game.setPermanentScore(game.getScoreFromSingles());
                 game.setScoreFromSingles(0);
@@ -568,28 +490,28 @@ std::istream& operator>> (std::istream& input, zilch& game)
                 game.incCurrentPlayer();
                 std::cout << "\nIt is now " << game.getCurrentPlayer() << "'s turn" << std::endl;
             }
-            else if (!game.availableOptionBool(game)) {
+            else if (!game.availableOptionBool()) {
                 zilch::clear();
                 return input;
             }
             else {
                 game.clear();
                 std::cout << "You cannot end without a score higher than 1000" << std::endl;
-                game.pauseAndContinue(game, 1);
+                game.pauseAndContinue(game, true);
             }
             break;
 
         case '?':
             std::cout << "Possible options: " << std::endl;
-            if ( game.straitBool(game) )
+            if ( game.straitBool() )
                 std::cout << "\tStrait" << std::endl;
-            if ( game.setBool(game) )
+            if ( game.setBool() )
                 std::cout << "\tSets" << std::endl;
-            if ( game.multiplesBool(game) )
+            if ( game.multiplesBool() )
                 std::cout << "\tMultiples, value: " << game.getValOfAvailableMultiple() << std::endl;
-            if ( game.multiplesAddBool(game) )
+            if ( game.multiplesAddBool() )
                 std::cout << "\tAddons, value: " << game.getValOfChosenMultiple() << std::endl;
-            if (game.singleBool(game, 1) || game.singleBool(game, 5) )
+            if (game.singleBool(1) || game.singleBool(5) )
                 std::cout << "\tSingles" << std::endl;
             break;
 
