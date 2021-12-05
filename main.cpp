@@ -19,12 +19,29 @@ int main() {
     string player;
     zilch game;
 
+    /***************
+    *   Welcome!   *
+    ***************/
+    zilch::clear();
+    cout << "Welcome to Zilch!\n" << endl
+         << "Here are the basic rules:" << endl
+         << "You must score an initial 1000 points to start logging your points" << endl
+         << "A group of 3 dice give you 100 points times the value of that die, for example:" << endl
+         << "\ta roll of 3 3 3 will give you 300 points" << endl
+         << "\tan exception is made for 1 1 1 which will give you 1000 points" << endl
+         << "Each additional number added to this group of three doubles the points received from it, for example:" << endl
+         << "\ta roll of 3 3 3 3 or a roll of 3 3 3 and a later roll of 3 in the same turn would give you 600 points" << endl
+         << "\tthe same applies to a group of 3 1's, 2 more 1's are rolled the score would be 1000*2*2 = 4000" << endl
+         << "Finally, only single 1's or 5's are worth points with a single 1 being 100 points and a 5 being 50." << endl;
+    zilch::pauseAndContinue(game);
+
     /***************************
     *    Setting up players    *
     ***************************/
     ///   Input score limit and failsafe   ///
-    zilch::clear();
-    cout << "Enter the desired score limit: " << flush;
+    cout << "A minimum score of 1000 is needed to play the game," << endl
+         << "but a score of 5000 or more being recommended.\n" << endl
+         << "Enter the desired score limit: " << flush;
     cin >> scoreLimit;
 
     ///   Verify a valid input   ///

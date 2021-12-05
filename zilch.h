@@ -13,8 +13,8 @@
 #include <utility>
 #include <vector>
 #include <climits>
+#include <cstring>
 #include <unistd.h>
-#include <term.h>
 #include <optional>
 
 #if defined(_WIN32)
@@ -39,6 +39,7 @@
 #elif defined(__APPLE__) && defined(__MACH__) // Apple OSX and iOS (Darwin)
 
 #include <TargetConditionals.h>
+//#include <term.h>
 
 #if TARGET_IPHONE_SIMULATOR == 1
 #define PLATFORM_NAME "ios" // Apple iOS
@@ -283,7 +284,7 @@ public:
         return continueTurn;
     }
     void setContinueTurnBool(bool val, bool bust = false) {
-        if (!val && !bust) [[likely]] {
+        if (!val && !bust) {
             ///   Greater than or equal to 1000: log and end turn   ///
             if (getRunningScore() >= 1000) {
 

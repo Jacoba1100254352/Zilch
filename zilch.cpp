@@ -329,20 +329,12 @@ void zilch::tiedEnding(zilch &game) {
 ***************************/
 void zilch::pauseAndContinue(zilch &game, bool showCurrentScore) {
     std::cout << "\nPress enter to continue ..." << std::flush;
-    if (strcmp(PLATFORM_NAME, "windows") > 0) {
+    if (strcmp(PLATFORM_NAME, "windows") > 0)
         system("pause"); // For Windows users
-        system("cls");
-    } else if (strcmp(PLATFORM_NAME, "macos") > 0) {
+    else if (strcmp(PLATFORM_NAME, "macos") > 0)
         system("read"); // For  macOS users
-        system("clear");
 
-        if (!cur_term) {
-            int result;
-            setupterm(nullptr, STDOUT_FILENO, &result);
-            //if (result <= 0) return;
-        }
-        putp(tigetstr((char *) "clear"));
-    }
+    zilch::clear();
 
     if (showCurrentScore)
         std::cout << game.getCurrentPlayer() << "'s current score: " << game.getRunningScore() << std::endl;
@@ -360,18 +352,18 @@ void zilch::showDice(zilch &game) {
             else std::cout << die.first << ", ";
 }
 void zilch::clear() {
-    if (strcmp(PLATFORM_NAME, "windows") > 0) {
+    if (strcmp(PLATFORM_NAME, "windows") > 0)
         system("cls");
-    } else if (strcmp(PLATFORM_NAME, "macos") > 0) {
+    else if (strcmp(PLATFORM_NAME, "macos") > 0)
         system("clear");
 
-        if (!cur_term) {
+/*        if (!cur_term) {
             int result;
             setupterm(nullptr, STDOUT_FILENO, &result);
             //if (result <= 0) return;
         }
         putp(tigetstr((char *) "clear"));
-    }
+    }*/
 }
 void zilch::printInstructions(zilch &game, zilch::printOptions options) {
     zilch::showDice(game);
