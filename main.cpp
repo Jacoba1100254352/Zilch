@@ -61,8 +61,10 @@ int main() {
     ///   Verify a valid input   ///
     while (cin.fail() || numPlayers == 0) {
         system("clear");
-        cout << "Enter the desired score limit: " << scoreLimit;
-        cout << "\nEnter the amount of people who are playing: ";
+        cout << "A minimum score of 1000 is needed to play the game," << endl
+             << "but a score of 5000 or more being recommended.\n" << endl
+             << "Enter the desired score limit: " << scoreLimit;
+        cout << "\nEnter the amount of people who are playing: " << flush;
         cin.clear();
         cin.ignore(numeric_limits<int>::max(), '\n');
         cin >> numPlayers;
