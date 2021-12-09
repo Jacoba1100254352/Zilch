@@ -26,6 +26,7 @@ int main() {
     cout << "Welcome to Zilch!\n" << endl
          << "Here are the basic rules:" << endl
          << "You must score an initial 1000 points to start logging your points" << endl
+         << "Sets (three sets of two) and straits (1, 2, 3, 4, 5, 6) give 1000 points" << endl
          << "A group of 3 dice give you 100 points times the value of that die, for example:" << endl
          << "\ta roll of 3 3 3 will give you 300 points" << endl
          << "\tan exception is made for 1 1 1 which will give you 1000 points" << endl
