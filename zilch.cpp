@@ -11,22 +11,13 @@ unsigned zilch::roll() {
     return static_cast<unsigned>(dist(mt));
 }
 void zilch::rollSixDice(zilch &game) {
-    zilch::clear();
-    game.diceSetMap.clear(); // reset the map to be filled again
+    zilch::clear(); // Clear the screen
+    game.diceSetMap.clear(); // Reset the map to be filled again
     game.setOptionSelectedBool(false); // No options have yet been selected after a new roll
     game.setContinueSelectingBool(true); // Reset to allow for continuous selection after each new roll
 
-/*    ///   If no dice left, reset to 6   ///
-    if ( game.getNumOfDiceInPlay() == 0 ) {
-        game.setNumOfDiceInPlay( 6 );
-    }*/ // This is done in Check()
-
-    for (int i = 0; i < game.getNumOfDiceInPlay(); i++) {
-        unsigned roll = game.roll();
-        game.diceSetMap[roll]++;
-    }
-
-    //std::cout << "\nThe dice have been rolled" << std::endl;
+    for (int i = 0; i < game.getNumOfDiceInPlay(); i++)
+        game.diceSetMap[game.roll()]++;
 
     /// Run checks on what is possible to play   ///
     zilch::check(game);
@@ -197,7 +188,7 @@ void zilch::multiple(zilch &game, const unsigned VAL_OF_DESIRED_MULTIPLE) {
         ///   Check for incorrect amount of dice/possible multiples   ///
         if (game.diceSetMap[VAL_OF_DESIRED_MULTIPLE] > 6 || game.diceSetMap[VAL_OF_DESIRED_MULTIPLE] - 3 < 0)
             throw std::out_of_range("Error: You have " + std::to_string(game.diceSetMap[VAL_OF_DESIRED_MULTIPLE]) +
-                                    " dice. \nYou cannot have more than 6 dice or less than 3 multiples. \nLine: " +
+                                    " dice. \nYou cannot have more than 6 dice or less than 3 multiples.\nFile: " + std::string(__FILE_NAME__) + "\nLine: " +
                                     std::to_string(__LINE__));
 
         ///   Sets the turn score based on the number of Multiples selected   ///
@@ -395,7 +386,7 @@ void zilch::printInstructions(zilch &game, zilch::printOptions options) {
             break;
 
         default:
-            throw std::invalid_argument("Invalid enumeration, Line: " + std::to_string(__LINE__));
+            throw std::invalid_argument("Invalid enumeration, File: " + std::string(__FILE_NAME__) + ", Line: " + std::to_string(__LINE__));
             break;
     }
 }
@@ -467,6 +458,7 @@ std::istream &operator>>(std::istream &input, zilch &game) {
                 game.applyAllPossibleOptions(game);
                 break;
             }
+
         case 'm':
             input >> val;
             if ((game.multiplesBool() && game.desiredMultipleAvailabilityBool(val)) // Multiples available

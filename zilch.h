@@ -93,12 +93,10 @@ public:
         return (std::any_of(diceSetMap.begin(), diceSetMap.end(), [](const auto &die) { return die.second >= 3; }));
     }
     bool multiplesAddBool() {
-        return (std::any_of(diceSetMap.begin(), diceSetMap.end(),
-                            [this](const auto &die) { return die.first == getValOfChosenMultiple(); }));
+        return (std::any_of(diceSetMap.begin(), diceSetMap.end(), [this](const auto &die) { return die.first == getValOfChosenMultiple(); }));
     }
     bool singleBool(unsigned single) {
-        return (std::any_of(diceSetMap.begin(), diceSetMap.end(),
-                            [single](const auto &die) { return die.first == single; }));
+        return (std::any_of(diceSetMap.begin(), diceSetMap.end(), [single](const auto &die) { return die.first == single; }));
     }
     [[nodiscard]] bool bust50Bool() const {
         return (bust50 != 0);
@@ -123,7 +121,7 @@ public:
     static void single(zilch &, unsigned);
     static void check(zilch &);
     static void updateValOfAvailableMultiples(zilch &);
-    static void applyAllPossibleOptions(zilch&);
+    static void applyAllPossibleOptions(zilch &);
 
     /*******************************
     *   UNUSED FINDING FUNCTIONS   *
@@ -217,7 +215,7 @@ public:
 
         if (scoreFromSingles.size() != amountOfPlayers || scoreFromMultiples.size() != amountOfPlayers ||
             turnScore.size() != amountOfPlayers || permanentScore.size() != amountOfPlayers)
-            throw std::length_error("Score maps are incorrectly sized, Line: " + std::to_string(__LINE__));
+            throw std::length_error("Score maps are incorrectly sized, File: " + std::string(__FILE_NAME__) +", Line: " + std::to_string(__LINE__));
     }
 
     ///   Global Variable for knowing the multiple add-on choice   ///
