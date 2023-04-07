@@ -30,7 +30,7 @@ int main() {
 	*    Setting up players    *
 	***************************/
 	///   Input score limit and failsafe   ///
-	cout << "A minimum score of 1000 is needed to play the game," << endl << "but a score of 5000 or more being recommended.\n" << endl << "Enter the desired score limit: ";
+	cout << "A minimum score of 1000 is needed to play the game," << endl << "but a score of 5000 or more being recommended.\n" << endl << "Enter the desired score limit: " << flush;
 	cin >> scoreLimit;
 
 	///   Verify a valid input   ///
@@ -38,7 +38,7 @@ int main() {
 		zilch::clear();
 		cout << "Enter the desired score limit: ";
 		cin.clear();
-		cin.ignore(INT_MAX, '\n');
+		cin.ignore(numeric_limits<int>::max(), '\n');
 		cin >> scoreLimit;
 	}
 
@@ -48,7 +48,7 @@ int main() {
 	cin >> numPlayers;
 
 	///   Verify a valid input   ///
-	while (cin.fail() || !numPlayers) {
+	while (cin.fail() || numPlayers == 0) {
 		system("clear");
 		cout << "A minimum score of 1000 is needed to play the game," << endl << "but a score of 5000 or more being recommended.\n" << endl << "Enter the desired score limit: " << scoreLimit;
 		cout << "\nEnter the amount of people who are playing: " << flush;
