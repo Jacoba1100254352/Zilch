@@ -1,5 +1,5 @@
-#ifndef ZILCH_ZILCH_H
-#define ZILCH_ZILCH_H
+#ifndef ZILCH_OLDZILCH_H
+#define ZILCH_OLDZILCH_H
 
 #include <iostream>
 #include <algorithm>
@@ -392,4 +392,4 @@ private:
 	std::vector<std::string> players = {""};
 };
 
-#endif // ZILCH_ZILCH_H
+#endif // ZILCH_OLDZILCH_H

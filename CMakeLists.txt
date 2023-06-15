@@ -5,5 +5,10 @@ set(CMAKE_CXX_STANDARD 23)
 
 add_executable(Zilch
         main.cpp
-        zilch.cpp
-        zilch.h)
+        oldZilch.h
+        Die.h
+        Die.cpp
+        Checker.h
+        Checker.cpp
+        Zilch.h
+        Zilch.cpp)
