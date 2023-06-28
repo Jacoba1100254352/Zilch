@@ -1,60 +1,58 @@
 #include "Checker.h"
+#include "Dice.h"
 #include <iostream>
 #include <cmath>
 #include <limits>
 
-void Checker::check(zilch& game) {
+void Checker::check() {
     if (!game.isOptionAvailable()) {
         if (game.getNumOfDiceInPlay() == 6 && !game.getTurnScore()) {
-            zilch::showDice(game);
+            showDice(game);
             std::cout << "\nYou have busted on the first roll, try again" << std::endl;
             game.setScoreFromSingles(50);
-            zilch::pauseAndContinue(game, true);
+            pauseAndContinue(game, true);
         } else if (game.getNumOfDiceInPlay() >= 1) {
-            zilch::showDice(game);
+            showDice(game);
             std::cout << "\nYou have busted" << std::endl;
             game.setNumOfDiceInPlay(0);
             game.setTurnScores(0);
             game.setContinueTurnBool(false, true);
-            zilch::pauseAndContinue(game);
+            pauseAndContinue(game);
         } else {
             std::cout << "\nYou have a full set of dice now" << std::endl;
             game.setNumOfDiceInPlay(6);
-            zilch::pauseAndContinue(game, true);
+            pauseAndContinue(game, true);
         }
-    } else {
-        Checker::checkingUserInput(game);
-    }
+    } else checkingUserInput();
 }
 
-void Checker::checkingUserInput(zilch& game) {
+void Checker::checkingUserInput() {
     uint8_t playOrEndTurn = 0;
 
     do {
-        zilch::clear();
-        updateValOfAvailableMultiples(game);
+        clear();
+        updateValOfAvailableMultiples();
 
-        if (game.canAddMultiples() && (game.getScoreFromMultiples() >= 200))
+        if (canAddMultiples() && (game.getScoreFromMultiples() >= 200))
             std::cout << "You can add to your multiple of " << game.getValOfChosenMultiple() << "!\n";
 
         if (!game.getOptionSelectedBool())
-            zilch::printInstructions(game, zilch::ENTER);
+            printInstructions(game, Zilch::ENTER);
         else if (game.isOptionAvailable())
-            zilch::printInstructions(game, zilch::NEXT);
-        else
-            break;
+            printInstructions(game, Zilch::NEXT);
+        else break;
 
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<int>::max(), '\n');
         std::cin >> game;
 
         if (game.getRunningScore() >= 1000) {
-            uint32_t highestScore = game.getPermanentScore(game.getHighestScoringPlayer());
+            uint32_t highestScore = game.getHighestScoringPlayer()->score.permanentScore;
 
             if (highestScore < game.getScoreLimit())
                 std::cout << "\n" << game.getCurrentPlayer() << "'s current score: " << game.getRunningScore();
             else if (highestScore > game.getRunningScore())
-                std::cout << "\n\nYour current score of " << game.getRunningScore() << " is " << highestScore - game.getRunningScore() << " less than " << game.getHighestScoringPlayer() << "'s High Score of " << highestScore << " so keep going! :)" << std::endl;
+                std::cout << "\n\nYour current score of " << game.getRunningScore() << " is " << highestScore - game.getRunningScore() << " less than " << game.getHighestScoringPlayer()->name << "'s High Score of " << highestScore << " so keep going! :)" << std::endl;
             else if (game.getHighestScoringPlayer() != game.getCurrentPlayer())
                 std::cout << "You are currently tied with the highest scoring player!";
             else
@@ -67,7 +65,7 @@ void Checker::checkingUserInput(zilch& game) {
                 std::cin >> playOrEndTurn;
 
                 while (std::cin.fail() || playOrEndTurn < 0 || 2 < playOrEndTurn) {
-                    zilch::clear();
+                    clear();
                     std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
                     std::cin.clear();
                     std::cin.ignore(std::numeric_limits<int>::max(), '\n');
@@ -75,150 +73,176 @@ void Checker::checkingUserInput(zilch& game) {
                 }
 
                 if ((playOrEndTurn == 2) && (game.getRunningScore() >= 1000))
-                    applyAllPossibleOptions(game);
+                    applyAllPossibleOptions();
 
                 game.setContinueTurnBool(playOrEndTurn != 2);
                 game.setContinueSelectingBool(playOrEndTurn == 1);
-                zilch::clear();
+                clear();
             }
         } else if (!game.isOptionAvailable()) {
-            zilch::clear();
-            zilch::showDice(game);
+            clear();
+            showDice(game);
             std::cout << "\nThere are no options left";
-            zilch::pauseAndContinue(game);
+            pauseAndContinue(game);
             break;
         }
     } while (game.getContinueTurnBool() && game.getContinueSelectingBool() && game.isOptionAvailable());
 }
 
-void Checker::straits(zilch& game) {
-    if (!game.isStrait())
+void Checker::straits() {
+    if (!isStrait())
         return;
 
     game.setScoreFromSingles(1000);
-    game.diceSetMap.clear();
+    game.getCurrentPlayer()->dice.diceSetMap.clear();
     game.setOptionSelectedBool(true);
 }
 
-void Checker::set(zilch& game) {
-    if (!game.isSet())
+void Checker::set() {
+    if (!isSet())
         return;
 
     game.setScoreFromSingles(1000);
-    game.diceSetMap.clear();
+    game.getCurrentPlayer()->dice.diceSetMap.clear();
     game.setOptionSelectedBool(true);
 }
 
-void Checker::multiple(zilch& game, uint8_t val) {
-    if (!game.isDesiredMultipleAvailable(val) && !game.getValOfAvailableMultiple())
+void Checker::multiple(uint8_t val) {
+    std::map<uint8_t, uint8_t> &_diceSetMap = game.getCurrentPlayer()->dice.diceSetMap;
+    if (!isDesiredMultipleAvailable(val) && !game.getValOfAvailableMultiple())
         return;
 
-    if (game.isMultiple()) {
+    if (isMultiple()) {
         game.setValOfChosenMultiple(val);
         uint16_t baseScore = (val == 1) ? 1000 : val * 100;
-        uint8_t numMultiples = game.diceSetMap[val] - 3;
-        uint16_t score = static_cast<uint16_t>(pow(2, numMultiples) * baseScore);
+        uint8_t numMultiples = _diceSetMap[val] - 3;
+        auto score = static_cast<uint16_t>(pow(2, numMultiples) * baseScore);
 
-        if (game.diceSetMap[val] > 6 || game.diceSetMap[val] - 3 < 0)
-            throw std::out_of_range("Error: You have " + std::to_string(game.diceSetMap[val]) + " dice. \nYou cannot have more than 6 dice or less than 3 multiples.");
+        if (_diceSetMap[val] > 6 || _diceSetMap[val] - 3 < 0)
+            throw std::out_of_range("Error: You have " + std::to_string(_diceSetMap[val]) + " dice. \nYou cannot have more than 6 dice or less than 3 multiples.");
 
-        if (std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [val](const auto& die) { return die.first == val; }))
+        if (std::any_of(_diceSetMap.begin(), _diceSetMap.end(), [val](const auto& die) { return die.first == val; }))
             game.setScoreFromMultiples(score);
-    } else if (game.canAddMultiples()) {
-        if ((game.getScoreFromMultiples() < 200) || (game.diceSetMap[val] > 3))
+    } else if (canAddMultiples()) {
+        if ((game.getScoreFromMultiples() < 200) || (_diceSetMap[val] > 3))
             throw std::out_of_range("Error: You must have had a multiple selected and cannot have more than 6 dice or than 3 added multiples");
 
-        if (std::any_of(game.diceSetMap.begin(), game.diceSetMap.end(), [val](const auto& die) { return die.first == val; }))
-            game.setScoreFromMultiples(game.diceSetMap[val]);
+        if (std::any_of(_diceSetMap.begin(), _diceSetMap.end(), [val](const auto& die) { return die.first == val; }))
+            game.setScoreFromMultiples(_diceSetMap[val]);
     } else
         return;
 
-    game.diceSetMap[val] = 0;
+    _diceSetMap[val] = 0;
     game.setNumOfDiceInPlay();
     game.setOptionSelectedBool(true);
 }
 
-void Checker::single(zilch& game, uint8_t val) {
-    if (!((val == 1 && game.isSingle(val)) || (val == 5 && game.isSingle(5))))
+void Checker::single(uint8_t val) {
+    std::map<uint8_t, uint8_t> &_diceSetMap = game.getCurrentPlayer()->dice.diceSetMap;
+    if (!((val == 1 && isSingle(val)) || (val == 5 && isSingle(5))))
         return;
 
-    if ((game.getValOfChosenMultiple() == val) || (game.diceSetMap[val] >= 3)) {
+    if ((game.getValOfChosenMultiple() == val) || (_diceSetMap[val] >= 3)) {
         std::cout << "The option to chose multiples has been automatically applied.\n" << std::endl;
-        game.multiple(game, val);
-    } else if ((game.diceSetMap[val] < 3) && (game.diceSetMap[val] >= 1)) {
+        multiple(val);
+    } else if ((_diceSetMap[val] < 3) && (_diceSetMap[val] >= 1)) {
         game.setScoreFromSingles((val == 1) ? 100 : 50);
-        game.diceSetMap[val]--;
+        _diceSetMap[val]--;
         game.setNumOfDiceInPlay(-1);
         game.setOptionSelectedBool(true);
     }
 }
 
-void Checker::updateValOfAvailableMultiples(zilch& game) {
-    for (const auto& die : game.diceSetMap) {
+void Checker::updateValOfAvailableMultiples() {
+    std::map<uint8_t, uint8_t> &_diceSetMap = game.getCurrentPlayer()->dice.diceSetMap;
+    for (const auto& die : _diceSetMap)
         if (die.second >= 3)
             game.setValOfAvailableMultiple(die.first);
-    }
 }
 
-void Checker::applyAllPossibleOptions(zilch& game) {
+void Checker::applyAllPossibleOptions() {
     while (game.isOptionAvailable()) {
-        if (game.isStrait())
-            game.straits(game);
-        if (game.isSet())
-            game.set(game);
-        for (uint8_t i = 1; i <= 6; i++) {
-            if ((game.isMultiple() && game.isDesiredMultipleAvailable(i)) || ((game.getScoreFromMultiples() >= 200) && (game.getValOfChosenMultiple() == i) && (game.canAddMultiples())))
-                game.multiple(game, i);
-        }
-        if (game.isSingle(1))
-            game.single(game, 1);
-        if (game.isSingle(5))
-            game.single(game, 5);
+        if (isStrait())
+            straits();
+        if (isSet())
+            set();
+        for (uint8_t i = 1; i <= 6; i++)
+            if ((isMultiple() && isDesiredMultipleAvailable(i)) || ((game.getScoreFromMultiples() >= 200) && (game.getValOfChosenMultiple() == i) && (canAddMultiples())))
+                multiple(i);
+
+        if (isSingle(1))
+            single(1);
+        if (isSingle(5))
+            single(5);
     }
 }
 
-void Checker::lastTurnOpportunity(zilch& game, int8_t FULL_SET_OF_DICE) {
-    std::string gameEndingPlayer = game.getCurrentPlayer();
+void Checker::lastTurnOpportunity(const uint8_t FULL_SET_OF_DICE) {
+    Player* gameEndingPlayer = game.getCurrentPlayer();
 
-    std::cout << gameEndingPlayer << " is over " << game.getScoreLimit() << "\nEveryone else has one more chance to win" << std::endl;
-    zilch::pauseAndContinue(game);
+    std::cout << gameEndingPlayer->name << " is over " << game.getScoreLimit() << "\nEveryone else has one more chance to win" << std::endl;
+    pauseAndContinue(game);
     std::cout << "\n" << std::endl;
 
     game.incCurrentPlayer();
 
     do {
-        std::cout << "It is " << game.getCurrentPlayer() << "'s last turn" << std::endl;
-        game.setNumOfDiceInPlay(FULL_SET_OF_DICE);
+        std::cout << "It is " << game.getCurrentPlayer()->name << "'s last turn" << std::endl;
+        game.setNumOfDiceInPlay((int8_t) FULL_SET_OF_DICE);
 
+        Checker checker(game);
         while (game.getContinueTurnBool())
-            game.rollSixDice(game);
+            Dice::rollSixDice(game, checker);
 
         game.incCurrentPlayer();
     } while (game.getCurrentPlayer() != gameEndingPlayer);
 }
 
-void Checker::tiedEnding(zilch& game) {
+void Checker::tiedEnding() {
     uint8_t tieCounter = 0;
-    std::string playerWithHighestScore = game.getHighestScoringPlayer();
-    uint32_t highestScore = game.getPermanentScore(playerWithHighestScore);
-    std::vector<std::string> tie;
-    tie.resize(game.getAmountOfPlayers());
-    tie.at(0) = { playerWithHighestScore };
+    Player* playerWithHighestScore = game.getHighestScoringPlayer();
+    uint32_t& highestScore = playerWithHighestScore->score.permanentScore;
+    std::vector<Player*> tie;
 
-    for (const auto& player : game.getPlayers()) {
-        if (game.getPermanentScore(player) == highestScore)
-            tie.at(++tieCounter) = { player };
-    }
+    for (auto& player : game.getPlayers())
+        if (player.score.permanentScore == highestScore)
+            tie.push_back(&player);
 
-    if (tieCounter > 1) {
-        for (const auto& player : tie) {
-            std::cout << player;
-            if (player != tie.at(tie.size() - 2))
-                std::cout << ", ";
-            else if (player != tie.at(tie.size() - 1))
-                std::cout << " and ";
+    if (tie.size() > 1) {
+        for (size_t i = 0; i < tie.size(); ++i) {
+            std::cout << tie[i]->name;
+            if (i != tie.size() - 1) {
+                std::cout << ((i == tie.size() - 2) ? " and " : ", ");
+            }
         }
         std::cout << " have tied with " << highestScore << " Points!" << std::endl;
-    } else
-        std::cout << playerWithHighestScore << " won with " << highestScore << " Points!" << std::endl;
+    } else std::cout << playerWithHighestScore->name << " won with " << highestScore << " Points!" << std::endl;
+}
+
+bool Checker::isStrait() {
+    return (game.getCurrentPlayer()->dice.diceSetMap.size() == 6);
+}
+
+bool Checker::isSet() {
+    return (game.getCurrentPlayer()->dice.diceSetMap.size() == 3 && !isStrait() && !isMultiple() &&
+            !std::any_of(game.getCurrentPlayer()->dice.diceSetMap.begin(), game.getCurrentPlayer()->dice.diceSetMap.end(), [](const auto &die) { return die.second != 2; }));
+}
+
+bool Checker::isDesiredMultipleAvailable(uint8_t desiredMultiple) {
+    return (std::any_of(game.getCurrentPlayer()->dice.diceSetMap.begin(), game.getCurrentPlayer()->dice.diceSetMap.end(), [desiredMultiple](const auto &die) {
+        return die.first == desiredMultiple && die.second >= 3;
+    }));
+}
+
+///   Checks to verify that Multiples exist   ///
+bool Checker::isMultiple() { // or is/areMultiples
+    return (std::any_of(game.getCurrentPlayer()->dice.diceSetMap.begin(), game.getCurrentPlayer()->dice.diceSetMap.end(), [](const auto &die) { return die.second >= 3; }));
+}
+
+bool Checker::canAddMultiples() {
+    return (std::any_of(game.getCurrentPlayer()->dice.diceSetMap.begin(), game.getCurrentPlayer()->dice.diceSetMap.end(), [this](const auto &die) { return die.first == game.getValOfChosenMultiple(); }));
+}
+
+bool Checker::isSingle(uint8_t single) {
+    return (std::any_of(game.getCurrentPlayer()->dice.diceSetMap.begin(), game.getCurrentPlayer()->dice.diceSetMap.end(), [single](const auto &die) { return die.first == single; }));
 }

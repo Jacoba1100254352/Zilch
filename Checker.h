@@ -1,22 +1,34 @@
 #ifndef ZILCH_CHECKER_H
 #define ZILCH_CHECKER_H
 
-
-#include "oldZilch.h"
+#include "Zilch.h"
 
 class Checker {
 public:
-    static void check(zilch& game);
-    static void checkingUserInput(zilch& game);
-    static void straits(zilch& game);
-    static void set(zilch& game);
-    static void multiple(zilch& game, uint8_t val);
-    static void single(zilch& game, uint8_t val);
-    static void updateValOfAvailableMultiples(zilch& game);
-    static void applyAllPossibleOptions(zilch& game);
-    static void lastTurnOpportunity(zilch& game, int8_t FULL_SET_OF_DICE);
-    static void tiedEnding(zilch& game);
+    explicit Checker(Zilch& game) : game(game) {} // Constructor initializes the member variable
+
+    void check();
+    void checkingUserInput();
+    void straits();
+    void set();
+    void multiple(uint8_t val);
+    void single(uint8_t val);
+    void updateValOfAvailableMultiples();
+    void applyAllPossibleOptions();
+    void lastTurnOpportunity(uint8_t FULL_SET_OF_DICE = 6);
+    void tiedEnding();
+
+    [[nodiscard]] bool isStrait();
+    [[nodiscard]] bool isSet();
+    [[nodiscard]] bool isMultiple();
+    [[nodiscard]] bool isDesiredMultipleAvailable(uint8_t val);
+    [[nodiscard]] bool canAddMultiples();
+    [[nodiscard]] bool isSingle(uint8_t val);
+
+private:
+    Zilch game; // Member variable holding a reference to the Zilch instance
 };
+
 
 
 #endif //ZILCH_CHECKER_H

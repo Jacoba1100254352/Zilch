@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(Zilch
         main.cpp
         oldZilch.h
-        Die.h
-        Die.cpp
+        Dice.h
+        Dice.cpp
         Checker.h
         Checker.cpp
         Zilch.h
-        Zilch.cpp)
+        Zilch.cpp Player.h Score.h)
