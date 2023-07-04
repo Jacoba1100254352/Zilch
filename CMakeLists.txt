@@ -10,5 +10,9 @@ add_executable(Zilch
         Dice.cpp
         Checker.h
         Checker.cpp
-        Zilch.h
-        Zilch.cpp Player.h Score.h)
+        GameManager.h
+        GameManager.cpp
+        Player.h
+        Score.h
+        GameUI.h
+        GameUI.cpp PlatformDefinitions.h)

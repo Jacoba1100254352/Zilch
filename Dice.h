@@ -2,15 +2,28 @@
 #define ZILCH_DICE_H
 
 #include <cstdint>
-#include "Zilch.h"
-#include "Checker.h"
+#include <iostream>
+#include <map>
 
-struct Dice {
+#define FULL_SET_OF_DICE 6
+
+class Dice {
+public:
+    Dice() : numDiceInPlay(6) {} // Constructor initializes the member variable
+
     std::map<uint8_t, uint8_t> diceSetMap;
-    //static uint8_t numOfDiceInPlay;
 
-    static uint8_t roll();
-    static void rollSixDice(Zilch& game, Checker& checker);
+    void rollSixDice();
+
+    [[nodiscard]] uint8_t getNumDiceInPlay() const;
+    void setNumDiceInPlay(uint8_t numOfDice);
+
+    void recountNumDiceInPlay();
+
+    void displayDice();
+
+private:
+    uint8_t numDiceInPlay;
 };
 
 #endif //ZILCH_DICE_H
