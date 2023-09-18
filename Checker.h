@@ -12,11 +12,10 @@ public:
 
     void handleFirstRollBust();
     void handleBust();
-    void updateAvailableMultiple();
     void printPossibleMultipleAddition();
     static void ignoreRemainingInput();
     bool enterEndTurnOption();
-    void updateGameStatus(uint8_t playOrEndTurn);
+    void updateGameStatus(uint16_t playOrEndTurn);
     void handleNoOptionsLeft();
 
     void check();
@@ -25,20 +24,16 @@ public:
     void checkStraits();
     void checkSet();
     void checkMultiple(uint16_t val);
-    void checkSingle(uint8_t val);
+    void checkSingle(uint16_t val);
 
-    void updateAvailableMultipleValues();
     void applyPossibleOptions();
-
-    void checkLastTurnOpportunity();
-    void checkTiedEnding();
 
     [[nodiscard]] bool isStrait() const;
     [[nodiscard]] bool isSet() const;
     [[nodiscard]] bool isMultiple() const;
-    [[nodiscard]] bool isDesiredMultipleAvailable(uint8_t val) const;
+    [[nodiscard]] bool isDesiredMultipleAvailable(uint16_t val) const;
     [[nodiscard]] bool canAddMultiples() const;
-    [[nodiscard]] bool isSingle(uint8_t val) const;
+    [[nodiscard]] bool isSingle(uint16_t val) const;
 
     // OptionAvailability
     [[nodiscard]] bool isOptionAvailable() const;
@@ -48,13 +43,11 @@ public:
 private:
     GameManager& game; // Member variable holding a reference to the GameManager instance
 
-    void manageDiceUpdateCount(uint8_t numOfDice);
-
     // Input Functions
-    void executeSelection(uint8_t val);
+    void executeSelection(uint16_t val);
     void executeSecondaryCommand(std::istream& input);
-    bool canProcessMultiple(uint8_t val);
-    void handleFailedMultiple(uint8_t val);
+    bool canProcessMultiple(uint16_t val);
+    void handleFailedMultiple(uint16_t val);
     void processZeroCommand();
     void displayPossibleOptions();
     static void displayImpossibleOptionMessage();

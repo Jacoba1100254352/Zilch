@@ -12,6 +12,6 @@ class GameManager;
 void displayGameInfo();
 void clear();
 void pauseAndContinue();
-void printInstructions(const GameManager &game, uint8_t options);
+void printInstructions(const GameManager &game, uint16_t options);
 
 #endif //ZILCH_GAME_UI_H

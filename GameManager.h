@@ -8,7 +8,7 @@
 
 class GameManager {
 public:
-    GameManager() : players({}), currentPlayer(nullptr), valueOfChosenMultiple(0), valueOfAvailableMultiple(0), selectedOptionStatus(false), turnContinuationStatus(true), selectionContinuationStatus(false) {}
+    GameManager() : players({}), currentPlayer(nullptr), valueOfChosenMultiple(0), selectedOptionStatus(false), turnContinuationStatus(true), selectionContinuationStatus(true) {}
 
     /************************
     *   ENUM FOR PRINTING   *
@@ -17,11 +17,16 @@ public:
         ENTER, NEXT, REENTER
     };
 
+    void initializeRollCycle();
     void playGame();
+
+    void manageLastTurnOpportunity();
+    void manageTiedEnding();
+
+    void manageDiceCount(uint16_t numOfDice);
 
     [[nodiscard]] Player* findHighestScoringPlayer();
     void switchToNextPlayer();
-    [[nodiscard]] std::vector<Player> getAllPlayers() const;
 
     /**************************
     *   GETTERS AND SETTERS   *
@@ -43,18 +48,13 @@ public:
     [[nodiscard]] Player* getCurrentPlayer() const;
 
     // ValueOfChosenMultiple
-    [[nodiscard]] uint8_t getValueOfChosenMultiple() const;
-    void setValueOfChosenMultiple(uint8_t valueOfChosenMultiple);
-
-    // ValueOfAvailableMultiple
-    [[nodiscard]] uint8_t getValueOfAvailableMultiple() const;
-    void setValueOfAvailableMultiple(uint8_t valueOfAvailableMultiple);
+    [[nodiscard]] uint16_t getValueOfChosenMultiple() const;
+    void setValueOfChosenMultiple(uint16_t valueOfChosenMultiple);
 
 private:
     std::vector<Player> players;
     Player* currentPlayer;
-    uint8_t valueOfChosenMultiple;
-    uint8_t valueOfAvailableMultiple;
+    uint16_t valueOfChosenMultiple;
     bool selectedOptionStatus;
     bool turnContinuationStatus;
     bool selectionContinuationStatus;

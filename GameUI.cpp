@@ -2,6 +2,7 @@
 #include "GameManager.h"
 
 void displayGameInfo() {
+    clear();
     std::cout << "Welcome to Zilch!" << std::endl
               << std::endl
               << "Here are the basic rules:" << std::endl
@@ -17,14 +18,14 @@ void displayGameInfo() {
               << std::endl;
 }
 
-void printInstructions(const GameManager &game, uint8_t options) {
+void printInstructions(const GameManager &game, uint16_t options) {
     game.getCurrentPlayer()->getScore().displayCurrentScore(game.getCurrentPlayer()->getName());
     game.getCurrentPlayer()->getDice().displayDice();
 
     const std::string instructions = "\tSingles -- s#, \n\tMultiples -- m#, \n\tSet -- se, \n\tStrait -- st;\n";
     std::string message = "Enter the option you wish to take";
 
-    if (game.getSelectedOptionStatus() && game.getCurrentPlayer()->getScore().getRunningScore() >= 1000)
+    if (game.getSelectedOptionStatus() && game.getCurrentPlayer()->getScore().getRoundScore() >= 1000)
         message += ", or type 0 to end your turn: ";
     else if (game.getSelectedOptionStatus())
         message += ", or type 0 to roll again: ";
@@ -55,7 +56,7 @@ void clear() {
 }
 
 void pauseAndContinue() {
-    std::cout << "\nPress enter to continue ..." << std::flush;
+    std::cout << "\nPress enter to continue... " << std::flush;
     if (strcmp(PLATFORM_NAME, "windows") > 0)
         system("pause"); // For Windows users
     else if (strcmp(PLATFORM_NAME, "macos") > 0)
