@@ -9,21 +9,26 @@
 
 class Dice {
 public:
-    Dice() : numDiceInPlay(6) {} // Constructor initializes the member variable
+    Dice() : numDiceInPlay(FULL_SET_OF_DICE) {} // Constructor initializes the member variable
 
-    std::map<uint8_t, uint8_t> diceSetMap;
+    std::map<uint16_t, uint16_t> diceSetMap;
 
-    void rollSixDice();
+    void rollDice();
 
-    [[nodiscard]] uint8_t getNumDiceInPlay() const;
-    void setNumDiceInPlay(uint8_t numOfDice);
+    [[nodiscard]] uint16_t getNumDiceInPlay() const;
+    void setNumDiceInPlay(uint16_t numOfDice);
 
-    void recountNumDiceInPlay();
+    [[maybe_unused]] void recountNumDiceInPlay();
+    void eliminateDice(uint16_t dieValue);
+
+    void calculateMultipleAvailability();
+    bool isMultipleAvailable() const;
 
     void displayDice();
 
 private:
-    uint8_t numDiceInPlay;
+    uint16_t numDiceInPlay;
+    bool multipleExists;
 };
 
 #endif //ZILCH_DICE_H

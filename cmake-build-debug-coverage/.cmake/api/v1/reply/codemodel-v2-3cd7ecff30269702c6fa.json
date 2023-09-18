@@ -1,0 +1,60 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.17"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Zilch",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "Zilch::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-Zilch-Debug-f3b24303ba7cb81ab066.json",
+					"name" : "Zilch",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/cmake-build-debug-coverage",
+		"source" : "/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 5
+	}
+}

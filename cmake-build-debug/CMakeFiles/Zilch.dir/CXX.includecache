@@ -1,0 +1,106 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Checker.cpp
+Checker.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Checker.h
+GameManager.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.h
+Dice.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Dice.h
+GameUI.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameUI.h
+iostream
+-
+cmath
+-
+limits
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Checker.h
+cstdint
+-
+iostream
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Dice.cpp
+Dice.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Dice.h
+random
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Dice.h
+cstdint
+-
+iostream
+-
+map
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.cpp
+GameManager.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.h
+Checker.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Checker.h
+GameUI.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameUI.h
+numeric
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.h
+map
+-
+vector
+-
+stdexcept
+-
+Player.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Player.h
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameUI.cpp
+GameUI.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameUI.h
+GameManager.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.h
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameUI.h
+map
+-
+string
+-
+cstdint
+-
+iostream
+-
+PlatformDefinitions.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/PlatformDefinitions.h
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/PlatformDefinitions.h
+sys/param.h
+-
+TargetConditionals.h
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Player.h
+utility
+-
+Dice.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Dice.h
+Score.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Score.h
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/Score.h
+cstdint
+-
+iostream
+-
+
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/main.cpp
+GameManager.h
+/Users/jacobanderson/Library/CloudStorage/Dropbox/Jacobs docs/Docs/Work and School/Programming/C++/Programs/Fun Side Programs/Zilch v.3/GameManager.h
+
