@@ -2,14 +2,13 @@
 #define ZILCH_DICE_H
 
 #include <cstdint>
-#include <iostream>
 #include <map>
 
 #define FULL_SET_OF_DICE 6
 
 class Dice {
 public:
-    Dice() : numDiceInPlay(FULL_SET_OF_DICE) {} // Constructor initializes the member variable
+    Dice() : numDiceInPlay(FULL_SET_OF_DICE), multipleExists(false) {} // Constructor initializes the member variable
 
     std::map<uint16_t, uint16_t> diceSetMap;
 
@@ -22,9 +21,9 @@ public:
     void eliminateDice(uint16_t dieValue);
 
     void calculateMultipleAvailability();
-    bool isMultipleAvailable() const;
+    [[nodiscard]] bool isMultipleAvailable() const;
 
-    void displayDice();
+    void displayDice() const;
 
 private:
     uint16_t numDiceInPlay;

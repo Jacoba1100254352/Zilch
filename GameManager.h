@@ -3,7 +3,6 @@
 
 #include <map>
 #include <vector>
-#include <stdexcept>
 #include "Player.h"
 
 class GameManager {
@@ -34,7 +33,7 @@ public:
 
     // SelectedOptionStatus
     [[nodiscard]] bool getSelectedOptionStatus() const;
-    void setSelectedOptionStatus(bool optionSelected);
+    void setSelectedOptionStatus(bool isOptionSelected);
 
     // TurnContinuationStatus
     [[nodiscard]] bool getTurnContinuationStatus() const;
@@ -49,7 +48,7 @@ public:
 
     // ValueOfChosenMultiple
     [[nodiscard]] uint16_t getValueOfChosenMultiple() const;
-    void setValueOfChosenMultiple(uint16_t valueOfChosenMultiple);
+    void setValueOfChosenMultiple(uint16_t chosenMultipleValue);
 
 private:
     std::vector<Player> players;

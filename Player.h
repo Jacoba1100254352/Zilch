@@ -9,7 +9,7 @@ class Player {
 public:
     Player() = delete; // Disable the default constructor as we always need a GameManager instance to create a Player
 
-    explicit Player(std::string playerName) : dice(), score(), name(std::move(playerName)) {} // Pass GameManager instance to Dice
+    explicit Player(std::string playerName) : name(std::move(playerName)) {} // Pass GameManager instance to Dice
 
     // No "sets" are included for these as the names don't change and everything else is pass by reference and defined in the constructor
     [[nodiscard]] Dice& getDice() { return dice; }

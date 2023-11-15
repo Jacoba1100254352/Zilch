@@ -75,7 +75,7 @@ void GameManager::manageLastTurnOpportunity() {
 }
 void GameManager::manageTiedEnding() {
     Player* playerWithHighestScore = findHighestScoringPlayer();
-    uint32_t highestScore = playerWithHighestScore->getScore().getPermanentScore();
+    const uint32_t highestScore = playerWithHighestScore->getScore().getPermanentScore();
     std::vector<Player*> tie;
 
     for (Player& player : players)
@@ -133,7 +133,7 @@ static uint16_t getNumberOfPlayers() {
     return numPlayers;
 }
 void GameManager::enterAndAddPlayers() {
-    uint16_t numPlayers = getNumberOfPlayers();
+    const uint16_t numPlayers = getNumberOfPlayers();
 
     players.clear();  // Clears any previous players
     for (uint16_t i = 0; i < numPlayers; i++) {
@@ -163,11 +163,11 @@ void GameManager::switchToNextPlayer() {
 ///   Score Limit and Highest Score   ///
 void GameManager::enterAndSetScoreLimit() {
     // Variables
-    const uint32_t MIN_SCORE_LIMIT = 1000;
     uint32_t limit;
 
     // Enter and Validate scoreLimit
     while (true) {
+        constexpr uint32_t MIN_SCORE_LIMIT = 1000;
         std::cout << "\nEnter the score limit (minimum " << MIN_SCORE_LIMIT << "): ";
         std::cin >> limit;
 
@@ -201,7 +201,7 @@ Player* GameManager::findHighestScoringPlayer() {
 uint16_t GameManager::getValueOfChosenMultiple() const {
     return valueOfChosenMultiple;
 }
-void GameManager::setValueOfChosenMultiple(uint16_t chosenMultipleValue) {
+void GameManager::setValueOfChosenMultiple(const uint16_t chosenMultipleValue) {
     valueOfChosenMultiple = chosenMultipleValue;
 }
 
@@ -209,15 +209,15 @@ void GameManager::setValueOfChosenMultiple(uint16_t chosenMultipleValue) {
 bool GameManager::getSelectedOptionStatus() const {
     return selectedOptionStatus;
 }
-void GameManager::setSelectedOptionStatus(bool value) {
-    selectedOptionStatus = value;
+void GameManager::setSelectedOptionStatus(const bool isOptionSelected) {
+    selectedOptionStatus = isOptionSelected;
 }
 
 ///   Turn Continuation Status   ///
 bool GameManager::getTurnContinuationStatus() const {
     return turnContinuationStatus;
 }
-void GameManager::setTurnContinuationStatus(bool continueTurn, bool isBust) {
+void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust) {
     // If continueTurn is true or isBust is true, we continue with the current status
     if (isBust) {
         turnContinuationStatus = continueTurn;
@@ -225,10 +225,9 @@ void GameManager::setTurnContinuationStatus(bool continueTurn, bool isBust) {
     }
 
     // We opted to stop: Now, we know that both continueTurn and isBust are false.
-    Score& score = currentPlayer->getScore();
 
     // Greater than or equal to 1000: log and end turn
-    if (score.getRoundScore() >= 1000) {
+    if (Score& score = currentPlayer->getScore(); score.getRoundScore() >= 1000) {
         score.increasePermanentScore(score.getRoundScore());
         score.setRoundScore(0); // Reset Round Score
         std::cout << std::endl << currentPlayer->getName() << "'s permanent score has been logged and is now: " << score.getPermanentScore() << std::endl << std::endl;

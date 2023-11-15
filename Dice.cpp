@@ -1,5 +1,8 @@
 #include "Dice.h"
+
+#include <iostream>
 #include <random>
+
 
 static void removeZeros(std::map<uint16_t, uint16_t>& diceSetMap) {
     for (auto it = diceSetMap.begin(); it != diceSetMap.end(); )
@@ -19,8 +22,7 @@ void Dice::rollDice() {
     multipleExists = false;
 
     for (uint16_t i = 0; i < getNumDiceInPlay(); i++) {
-        uint16_t dieValue = roll();
-        if (++diceSetMap[dieValue] >= 3)
+        if (uint16_t dieValue = roll(); ++diceSetMap[dieValue] >= 3)
             multipleExists = true;
     }
 }
@@ -28,7 +30,7 @@ void Dice::rollDice() {
 [[nodiscard]] uint16_t Dice::getNumDiceInPlay() const {
     return numDiceInPlay;
 }
-void Dice::setNumDiceInPlay(uint16_t numOfDice) {
+void Dice::setNumDiceInPlay(const uint16_t numOfDice) {
     removeZeros(diceSetMap);
 
     if (numOfDice > 6)
@@ -39,15 +41,15 @@ void Dice::setNumDiceInPlay(uint16_t numOfDice) {
 void Dice::calculateMultipleAvailability() {
     multipleExists = false;
 
-    for (const auto die : diceSetMap)
-        if (die.second >= 3)
+    for (const auto [fst, snd] : diceSetMap)
+        if (snd >= 3)
             multipleExists = true;
 }
 bool Dice::isMultipleAvailable() const {
     return multipleExists;
 }
 
-void Dice::eliminateDice(uint16_t dieValue) {
+void Dice::eliminateDice(const uint16_t dieValue) {
     diceSetMap[dieValue] = 0;
     removeZeros(diceSetMap);
 }
@@ -56,18 +58,18 @@ void Dice::eliminateDice(uint16_t dieValue) {
     removeZeros(diceSetMap);
 
     numDiceInPlay = 0;
-    for (const auto die : diceSetMap)
-        numDiceInPlay += die.second;
+    for (const auto [fst, snd] : diceSetMap)
+        numDiceInPlay += snd;
 }
 
-void Dice::displayDice() {
+void Dice::displayDice() const {
     printf("\nYou have %d dice left\n", numDiceInPlay);
 
     ///   Build and Print Dice List String   ///
     std::string diceList;
-    for (const auto &die: diceSetMap)
-        for (uint16_t i = 0; i < die.second; i++)
-            diceList += std::to_string(die.first) + ", ";
+    for (const auto & [fst, snd]: diceSetMap)
+        for (uint16_t i = 0; i < snd; i++)
+            diceList += std::to_string(fst) + ", ";
 
     // Remove the trailing comma and space
     if (!diceList.empty())

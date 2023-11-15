@@ -1,5 +1,6 @@
 #include "GameUI.h"
 #include "GameManager.h"
+#include "PlatformDefinitions.h"
 
 void displayGameInfo() {
     clear();
@@ -18,7 +19,7 @@ void displayGameInfo() {
               << std::endl;
 }
 
-void printInstructions(const GameManager &game, uint16_t options) {
+void printInstructions(const GameManager &game, const uint16_t options) {
     game.getCurrentPlayer()->getScore().displayCurrentScore(game.getCurrentPlayer()->getName());
     game.getCurrentPlayer()->getDice().displayDice();
 
