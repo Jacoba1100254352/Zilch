@@ -1,10 +1,11 @@
 #include "GameManager.h"
+#include <numeric>
 #include "Checker.h"
 #include "GameUI.h"
-#include <numeric>
 
 
-void GameManager::initializeRollCycle() {
+void GameManager::initializeRollCycle()
+{
     /***
      * Initialize each segment of 6-dice re-rolls
      */
@@ -19,7 +20,8 @@ void GameManager::initializeRollCycle() {
     currentPlayer->getScore().setScoreFromMultiples(0);
 }
 
-void GameManager::playGame() {
+void GameManager::playGame()
+{
     displayGameInfo();
     pauseAndContinue();
 
@@ -31,7 +33,6 @@ void GameManager::playGame() {
 
     while (true) {
         for (Player& player : players) {
-
             // Check and manage game-end condition
             if (player.getScore().getPermanentScore() >= player.getScore().getScoreLimit()) {
                 manageLastTurnOpportunity();
@@ -50,11 +51,12 @@ void GameManager::playGame() {
     }
 }
 
-void GameManager::manageLastTurnOpportunity() {
+void GameManager::manageLastTurnOpportunity()
+{
     Player* gameEndingPlayer = currentPlayer;
 
     std::cout << gameEndingPlayer->getName() << " is over " << gameEndingPlayer->getScore().getScoreLimit() << std::endl
-              << "Everyone else has one more chance to win" << std::endl;
+        << "Everyone else has one more chance to win" << std::endl;
     pauseAndContinue();
     std::cout << "\n" << std::endl;
 
@@ -73,7 +75,9 @@ void GameManager::manageLastTurnOpportunity() {
         switchToNextPlayer();
     } while (currentPlayer != gameEndingPlayer);
 }
-void GameManager::manageTiedEnding() {
+
+void GameManager::manageTiedEnding()
+{
     Player* playerWithHighestScore = findHighestScoringPlayer();
     const uint32_t highestScore = playerWithHighestScore->getScore().getPermanentScore();
     std::vector<Player*> tie;
@@ -96,7 +100,8 @@ void GameManager::manageTiedEnding() {
 *   DICE HELPERS   *
 *******************/
 
-void GameManager::manageDiceCount(uint16_t numOfDice) {
+void GameManager::manageDiceCount(uint16_t numOfDice)
+{
     if (numOfDice == 0)
         numOfDice = FULL_SET_OF_DICE;
 
@@ -111,7 +116,8 @@ void GameManager::manageDiceCount(uint16_t numOfDice) {
 *****************************/
 
 ///   Player Setup   ///
-static uint16_t getNumberOfPlayers() {
+static uint16_t getNumberOfPlayers()
+{
     // Variables
     uint16_t numPlayers;
 
@@ -132,10 +138,12 @@ static uint16_t getNumberOfPlayers() {
 
     return numPlayers;
 }
-void GameManager::enterAndAddPlayers() {
+
+void GameManager::enterAndAddPlayers()
+{
     const uint16_t numPlayers = getNumberOfPlayers();
 
-    players.clear();  // Clears any previous players
+    players.clear(); // Clears any previous players
     for (uint16_t i = 0; i < numPlayers; i++) {
         std::string playerName;
         std::cout << "Enter the name of player " << i + 1 << ": ";
@@ -146,22 +154,28 @@ void GameManager::enterAndAddPlayers() {
     // Initialize currentPlayer to be the first player
     currentPlayer = &players.at(0);
 }
-void GameManager::addPlayer(const std::string& playerName) {
+
+void GameManager::addPlayer(const std::string& playerName)
+{
     players.emplace_back(playerName); // Pass this GameManager instance to the player
 }
 
 ///   Player Sequencing   ///
-Player* GameManager::getCurrentPlayer() const {
+Player* GameManager::getCurrentPlayer() const
+{
     return currentPlayer;
 }
-void GameManager::switchToNextPlayer() {
+
+void GameManager::switchToNextPlayer()
+{
     static size_t currentPlayerIndex = 0;
     currentPlayerIndex = ++currentPlayerIndex % players.size();
     currentPlayer = &players[currentPlayerIndex];
 }
 
 ///   Score Limit and Highest Score   ///
-void GameManager::enterAndSetScoreLimit() {
+void GameManager::enterAndSetScoreLimit()
+{
     // Variables
     uint32_t limit;
 
@@ -185,9 +199,11 @@ void GameManager::enterAndSetScoreLimit() {
     for (Player& player : players)
         player.getScore().setScoreLimit(limit);
 }
-Player* GameManager::findHighestScoringPlayer() {
+
+Player* GameManager::findHighestScoringPlayer()
+{
     Player* highestScoringPlayer = currentPlayer;
-    for (Player& player: players)
+    for (Player& player : players)
         if (player.getScore().getPermanentScore() > highestScoringPlayer->getScore().getPermanentScore())
             highestScoringPlayer = &player;
     return highestScoringPlayer;
@@ -198,26 +214,35 @@ Player* GameManager::findHighestScoringPlayer() {
 ****************************/
 
 ///   Chosen Multiple   ///
-uint16_t GameManager::getValueOfChosenMultiple() const {
+uint16_t GameManager::getValueOfChosenMultiple() const
+{
     return valueOfChosenMultiple;
 }
-void GameManager::setValueOfChosenMultiple(const uint16_t chosenMultipleValue) {
+
+void GameManager::setValueOfChosenMultiple(const uint16_t chosenMultipleValue)
+{
     valueOfChosenMultiple = chosenMultipleValue;
 }
 
 ///   Option Status   ///
-bool GameManager::getSelectedOptionStatus() const {
+bool GameManager::getSelectedOptionStatus() const
+{
     return selectedOptionStatus;
 }
-void GameManager::setSelectedOptionStatus(const bool isOptionSelected) {
+
+void GameManager::setSelectedOptionStatus(const bool isOptionSelected)
+{
     selectedOptionStatus = isOptionSelected;
 }
 
 ///   Turn Continuation Status   ///
-bool GameManager::getTurnContinuationStatus() const {
+bool GameManager::getTurnContinuationStatus() const
+{
     return turnContinuationStatus;
 }
-void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust) {
+
+void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust)
+{
     // If continueTurn is true or isBust is true, we continue with the current status
     if (isBust) {
         turnContinuationStatus = continueTurn;
@@ -245,10 +270,13 @@ void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust
 }
 
 ///   Selection Status   ///
-bool GameManager::getSelectionContinuationStatus() const {
+bool GameManager::getSelectionContinuationStatus() const
+{
     return selectionContinuationStatus;
 }
-void GameManager::setSelectionContinuationStatus(bool continueSelecting) {
+
+void GameManager::setSelectionContinuationStatus(bool continueSelecting)
+{
     if (!continueSelecting && !selectedOptionStatus) {
         std::cout << "You must select at least one option" << std::endl;
         continueSelecting = true;

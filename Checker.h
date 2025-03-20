@@ -8,7 +8,7 @@ class GameManager;
 
 class Checker {
 public:
-    explicit Checker(GameManager&game) : game(game) {} // Constructor initializes the member variable
+    explicit Checker(GameManager& game) : game(game) {} // Constructor initializes the member variable
 
     void handleFirstRollBust() const;
 
@@ -53,15 +53,15 @@ public:
     // OptionAvailability
     [[nodiscard]] bool isOptionAvailable() const;
 
-    void readInput(std::istream&input) const;
+    void readInput(std::istream& input) const;
 
 private:
-    GameManager&game; // Member variable holding a reference to the GameManager instance
+    GameManager& game; // Member variable holding a reference to the GameManager instance
 
     // Input Functions
     void executeSelection(uint16_t val) const;
 
-    void executeSecondaryCommand(std::istream&input) const;
+    void executeSecondaryCommand(std::istream& input) const;
 
     [[nodiscard]] bool canProcessMultiple(uint16_t val) const;
 

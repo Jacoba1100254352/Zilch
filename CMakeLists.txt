@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.30.5)
 project(Zilch)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(Zilch
         main.cpp
@@ -14,4 +16,5 @@ add_executable(Zilch
         Player.h
         Score.h
         GameUI.h
-        GameUI.cpp PlatformDefinitions.h)
+        GameUI.cpp
+        PlatformDefinitions.h)
