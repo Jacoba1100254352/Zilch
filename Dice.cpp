@@ -1,7 +1,10 @@
+// Dice.cpp
+
 #include "Dice.h"
 
 #include <iostream>
 #include <random>
+#include <ranges>
 
 
 static void removeZeros(std::map<uint16_t, uint16_t>& diceSetMap)
@@ -49,7 +52,7 @@ void Dice::calculateMultipleAvailability()
 {
     multipleExists = false;
 
-    for (const auto [fst, snd] : diceSetMap)
+    for (const auto snd : diceSetMap | std::views::values)
         if (snd >= 3)
             multipleExists = true;
 }
@@ -70,7 +73,7 @@ void Dice::eliminateDice(const uint16_t dieValue)
     removeZeros(diceSetMap);
 
     numDiceInPlay = 0;
-    for (const auto [fst, snd] : diceSetMap)
+    for (const auto snd : diceSetMap | std::views::values)
         numDiceInPlay += snd;
 }
 

@@ -1,5 +1,6 @@
+// GameManager.cpp
+
 #include "GameManager.h"
-#include <numeric>
 #include "Checker.h"
 #include "GameUI.h"
 

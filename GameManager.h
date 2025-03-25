@@ -1,7 +1,8 @@
+// GameManager.h
+
 #ifndef ZILCH_GAME_MANAGER_H
 #define ZILCH_GAME_MANAGER_H
 
-#include <map>
 #include <vector>
 #include "Player.h"
 

@@ -1,3 +1,5 @@
+// Checker.h
+
 #ifndef ZILCH_CHECKER_H
 #define ZILCH_CHECKER_H
 
@@ -18,7 +20,7 @@ public:
 
     static void ignoreRemainingInput();
 
-    [[nodiscard]] bool enterEndTurnOption() const;
+    [[nodiscard]] bool enterEndTurnOption(uint16_t &playOrEndTurn) const;
 
     void updateGameStatus(uint16_t playOrEndTurn) const;
 

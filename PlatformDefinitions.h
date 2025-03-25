@@ -1,3 +1,5 @@
+// PlatformDefinitions.h
+
 #ifndef ZILCH_PLATFORM_DEFINITIONS_H
 #define ZILCH_PLATFORM_DEFINITIONS_H
 

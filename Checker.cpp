@@ -1,11 +1,14 @@
+// Checker.cpp
+
 #include "Checker.h"
-#include "GameManager.h"
-#include "Dice.h"
-#include "GameUI.h"
-#include <iostream>
-#include <cmath>
-#include <limits>
 #include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <limits>
+#include <ranges>
+#include "Dice.h"
+#include "GameManager.h"
+#include "GameUI.h"
 
 /********************
 *   CHECK HELPERS   *
@@ -50,10 +53,8 @@ void Checker::ignoreRemainingInput()
     std::cin.ignore(std::numeric_limits<int>::max(), '\n');
 }
 
-bool Checker::enterEndTurnOption() const
+bool Checker::enterEndTurnOption(uint16_t &playOrEndTurn) const
 {
-    // Variables
-    uint16_t playOrEndTurn;
 
     // Enter Decision
     std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
@@ -135,14 +136,13 @@ void Checker::checkUserInput() const
         readInput(std::cin); // Read user input.
 
         // Process scoring and end of turn options.
-        if (score.getRoundScore() >= 1000) {
+        if (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000) {
             score.displayHighScoreInfo(currentPlayer->getName(), game.findHighestScoringPlayer()->getName());
 
-            //
-            if (enterEndTurnOption()) {
-                constexpr uint16_t playOrEndTurn = 0;
-                // Apply options and update game status if user chose to end turn.
-                if constexpr (playOrEndTurn == 2 && score.getRoundScore() >= 1000)
+            // Handle end turn decision.
+            if (uint16_t playOrEndTurn = 0; enterEndTurnOption(playOrEndTurn)) {
+                // Since enterEndTurnOption() returned true, the user chose to end the turn.
+                if (playOrEndTurn == 2 && (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000))
                     applyPossibleOptions();
                 updateGameStatus(playOrEndTurn);
                 clear(); // Clear screen.
@@ -416,7 +416,7 @@ void Checker::handleFailedMultiple(const uint16_t chosenMultiple) const
     std::cout << "You have selected an impossible option" << std::endl;
 
     if (chosenMultiple) {
-        for (const auto& [fst, snd] : game.getCurrentPlayer()->getDice().diceSetMap)
+        for (const auto& fst : game.getCurrentPlayer()->getDice().diceSetMap | std::views::keys)
             if (isDesiredMultipleAvailable(fst))
                 std::cout << "\tMultiples, value: " << fst << std::endl;
             else if (game.getValueOfChosenMultiple() == fst)
@@ -454,7 +454,7 @@ void Checker::displayPossibleOptions() const
     if (isSet())
         std::cout << "\tSets" << std::endl;
     if (isMultiple())
-        for (const auto& [fst, snd] : game.getCurrentPlayer()->getDice().diceSetMap)
+        for (const auto& fst : game.getCurrentPlayer()->getDice().diceSetMap | std::views::keys)
             if (isDesiredMultipleAvailable(fst))
                 std::cout << "\tMultiples, value: " << fst << std::endl;
     if (canAddMultiples())

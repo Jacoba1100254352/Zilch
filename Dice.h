@@ -1,3 +1,5 @@
+// Dice.h
+
 #ifndef ZILCH_DICE_H
 #define ZILCH_DICE_H
 
