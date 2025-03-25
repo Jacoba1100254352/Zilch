@@ -2,70 +2,25 @@
 #define ZILCH_ZILCH_H
 
 #include <iostream>
-#include <algorithm>
-#include <set>
-#include <stdexcept>
-#include <cstdlib>
-#include <ctime>
 #include <random>
-#include <cmath>
-#include <map>
-#include <utility>
+#include <stdexcept>
 #include <vector>
-#include <climits>
-#include <unistd.h>
-#include <term.h>
-
-#if defined(_WIN32)
-    #define PLATFORM_NAME "windows" // Windows
-#elif defined(_WIN64)
-    #define PLATFORM_NAME "windows" // Windows
-#elif defined(__CYGWIN__) && !defined(_WIN32)
-    #define PLATFORM_NAME "windows" // Windows (Cygwin POSIX under Microsoft Window)
-#elif defined(__ANDROID__)
-    #define PLATFORM_NAME "android" // Android (implies Linux, so it must come first)
-#elif defined(__linux__)
-    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
-#elif defined(__unix__) || !defined(__APPLE__) && defined(__MACH__)
-    #include <sys/param.h>
-    #if defined(BSD)
-        #define PLATFORM_NAME "bsd" // FreeBSD, NetBSD, OpenBSD, DragonFly BSD
-    #endif
-#elif defined(__hpux)
-    #define PLATFORM_NAME "hp-ux" // HP-UX
-#elif defined(_AIX)
-    #define PLATFORM_NAME "aix" // IBM AIX
-#elif defined(__APPLE__) && defined(__MACH__) // Apple OSX and iOS (Darwin)
-    #include <TargetConditionals.h>
-    #if TARGET_IPHONE_SIMULATOR == 1
-        #define PLATFORM_NAME "ios" // Apple iOS
-    #elif TARGET_OS_IPHONE == 1
-        #define PLATFORM_NAME "ios" // Apple iOS
-    #elif TARGET_OS_MAC == 1
-        #define PLATFORM_NAME "osx" // Apple OSX
-    #else
-        #define PLATFORM_NAME "macos" // Apple OS
-    #endif
-#elif defined(__sun) && defined(__SVR4)
-    #define PLATFORM_NAME "solaris" // Oracle Solaris, Open Indiana
-#else
-    #define PLATFORM_NAME NULL
-#endif
 
 class zilch
 {
 public:
-
-    /************************
-    *   ENUM FOR PRINTING   *
-    ************************/
-    enum printOptions{ ENTER, NEXT, REENTER };
+    /******************
+    *   CONSTRUCTOR   *
+    ******************/
+    //explicit zilch (unsigned ndip = 6, unsigned cpp = 0, unsigned npm = 0, unsigned vcm = 0, unsigned vam = 0, unsigned b50 = 0,
+    //                unsigned ap = 0, unsigned dsv = 0, unsigned s = 0, unsigned ps = 0, unsigned sl = 2000 );
 
     /************************
     *   ROLLING FUNCTIONS   *
     ************************/
     static unsigned roll() ;
     static void rollSixDice( zilch& ) ;
+    static void showDice(const zilch& );
 
     /*******************************
     *   DUMMY CHECKING FUNCTIONS   *
@@ -75,10 +30,9 @@ public:
     static bool desiredMultipleAvailabilityBool ( const zilch&, unsigned ) ; // Previously mValPass
     static bool multiplesBool( const zilch& ) ;
     static bool multiplesAddBool( const zilch& ) ;
-    static bool singleBool( const zilch&, unsigned ) ;
+    static bool singleBool( const zilch& ) ;
     static bool bust50Bool( const zilch& ) ;
-    static bool winBool( zilch& ) ;
-    static bool availableOptionBool( zilch& );
+    static bool winBool( const zilch& ) ;
 
     /****************************************
     *   CHECKING AND OUTPUTTING FUNCTIONS   *
@@ -86,6 +40,7 @@ public:
     static void straits( zilch& ) ;
     static void set( zilch& ) ;
     static void multiple ( zilch&, unsigned ) ;
+    static void multipleAdd ( zilch&, unsigned ) ;
     static void single ( zilch&, unsigned ) ;
     static void check( zilch& ) ;
 
@@ -100,82 +55,70 @@ public:
     *   ENDGAME AND TIE FUNCTIONS   *
     ********************************/
     static void lastTurnOpportunity( zilch&, unsigned ) ;
-    static void tiedEnding( zilch& ) ;
+    static void tiedEnding( zilch&, unsigned, unsigned ) ;
 
     /***************************
     *   Aesthetics Functions   *
     ***************************/
-    static void pauseAndContinue ( zilch&, unsigned) ;
-    static void showDice( zilch& );
-    static void clear();
-    static void printInstructions( zilch&, printOptions );
+    static void pauseAndContinue ( zilch&, unsigned ) ;
 
     /****************************
     *   GET AND SET FUNCTIONS   *
     ****************************/
 
-    ///   Game Size ( Number of Dice ) Functions   ///
+    ///   Game Size ( Number of Dice ) Functions GAMESIZE   ///
     unsigned getNumOfDiceInPlay() const
     {
         return static_cast<unsigned>(numOfDiceInPlay);
     }
-    void setNumOfDiceInPlay (long numOfDice = -20 )
+    void setNumOfDiceInPlay (const unsigned long numOfDice )
     {
-        repeat:
-        for (const auto die : diceSetMap)
-            if (die.second == 0) {
-                diceSetMap.erase(die.first);
-                goto repeat;
-            }
-
         if ( numOfDice > 6 )
             numOfDiceInPlay = 6;
-        else if (numOfDice == -20)
+        else if ( numOfDice == 0 || numOfDice == 6 )
         {
-            numOfDiceInPlay = 0;
-            for (const auto die : diceSetMap)
-                numOfDiceInPlay += die.second;
-        }
-        else if ( numOfDice < 0 ) {
-            if (abs(numOfDice) <= numOfDiceInPlay)
-                numOfDiceInPlay += numOfDice;
-            else numOfDiceInPlay = 6;
-        }
-        else if ( ( numOfDice == 0 ) || ( numOfDice == 6 ) )
-        {
+            setNumOfPrevMultiples(0);
             setValOfChosenMultiple(0);
-            if (getScoreFromMultiples() != 0) {
-                setTurnScores(getScoreFromMultiples() + getScoreFromSingles());
-            }
-            numOfDiceInPlay = numOfDice;
+            numOfDiceInPlay = 6;
         }
         else numOfDiceInPlay = numOfDice;
     }
 
-    ///   Global Variable to keep track of current player   ///
-    std::string getCurrentPlayer() const
+    ///   Global Variable for Looping Through Players KPASS   ///
+    unsigned getCurrentPlayerPosition() const
     {
-        return currentPlayer;
+        return currentPlayerPosition;
     }
-    void setCurrentPlayer ( std::string player)
+    void setCurrentPlayerPosition (const unsigned val )
     {
-        currentPlayer = std::move(player);
-    }
-    void incCurrentPlayer ()
-    {
-        for (int i = 0; i < players.size(); i++)
-            if (players.at(i) == currentPlayer) {
-                currentPlayer = (i == players.size() - 1) ? players.at(0) : players.at(i + 1);
-                break;
-            }
+        if ( val == 0 )
+            currentPlayerPosition = 0;
+        else
+        {
+            currentPlayerPosition += val;
+            currentPlayerPosition %= amountOfPlayers;
+        }
     }
 
-    ///   Global Variable for knowing the multiple add-on choice   ///
+    ///   Global Variable for Checking for Previous Multiples MPASS   ///
+    unsigned getNumOfPrevMultiples() const
+    {
+        return numOfPrevMultiples;
+    }
+    void setNumOfPrevMultiples (const unsigned val ) // if there was a multiple chosen numOfPrevMultiples = 1
+    {
+        if ( val == 0 )
+            numOfPrevMultiples = 0;
+        else
+            numOfPrevMultiples += 1;
+    }
+
+    ///   Global Variable for knowing the multiple add-on choice MVALPASS   ///
     unsigned getValOfChosenMultiple() const
     {
         return valOfChosenMultiple;
     }
-    void setValOfChosenMultiple ( unsigned val )
+    void setValOfChosenMultiple (const unsigned val )
     {
         valOfChosenMultiple = val;
     }
@@ -185,132 +128,106 @@ public:
     {
         return valOfAvailableMultiple;
     }
-    void setValOfAvailableMultiple ( unsigned val )
+    void setValOfAvailableMultiple (const unsigned val )
     {
         valOfAvailableMultiple = val;
     }
 
-    ///   Global Variable for Accessing the Amount of Players   ///
+    ///   Making sure you can only bust on your first roll once BUST50   ///
+/*    unsigned GetBust50() const
+    {
+        return bust50;
+    }
+    void SetBust50 ( unsigned val )
+    {
+        bust50 = val;
+    }*/
+
+    ///   Global Variable for Accessing the Amount of Players PLAYERSIZEPASS   ///
     unsigned getAmountOfPlayers() const
     {
         return amountOfPlayers;
     }
-    void setAmountOfPlayers (unsigned val )
+    void setAmountOfPlayers (const unsigned val )
     {
         if ( val == 0 )
             throw std::invalid_argument ( "You cannot have 0 players" );
         amountOfPlayers = val;
+        turnScore.resize ( val );
+        permanentScore.resize ( val );
         players.resize ( val );
     }
 
-    ///   Global Variable for Accessing the Amount of Players   ///
+    ///   Global Variable for Accessing the Amount of Players PLAYERSIZEPASS   ///
     unsigned getScoreLimit() const
     {
         return scoreLimit;
     }
-    void setScoreLimit ( unsigned val )
+    void setScoreLimit (const unsigned val )
     {
         if ( val == 0 )
         {
-            std::cout << "scoreFromSingles limit defaulted to 5000" << std::endl;
+            std::cout << "turnScore limit defaulted to 5000" << std::endl;
             scoreLimit = 5000;
         }
         scoreLimit = val;
     }
 
-    ///      ///
-    bool getOptionSelectedBool() const
+/*    unsigned getDiceSetVector() const
     {
-        return optionSelected;
+        return turnScore.at(getCurrentPlayerPosition());
     }
-    void setOptionSelectedBool(bool val)
+    void setDiceSetVector()
     {
-        optionSelected = val;
-    }
+        diceSetVector = { roll(), roll(), roll(), roll(), roll(), roll() };
+    }*/
 
-    ///      ///
-    bool getContinueSelectingBool() const
+    ///   turnScore Functions SCORE   ///
+    unsigned getRunningScore() const
     {
-        return continueSelecting;
-    }
-    void setContinueSelectingBool(bool val)
-    {
-        continueSelecting = val;
-    }
-
-    ///   scoreFromSingles Functions SCORE   ///
-    unsigned getScoreFromMultiples()
-    {
-        return scoreFromMultiples[getCurrentPlayer()];
-    }
-    void setScoreFromMultiples( unsigned val )
-    {
-        scoreFromMultiples[getCurrentPlayer()] = ( val == 0 ) ? 0 :
-                                                 ( val < 10 ) ? scoreFromMultiples[getCurrentPlayer()] * static_cast<unsigned>(pow(2,val)) : val;
-    }
-    unsigned getScoreFromSingles()
-    {
-        return scoreFromSingles[getCurrentPlayer()];
-    }
-    void setScoreFromSingles(unsigned val )
-    {
-        scoreFromSingles[getCurrentPlayer()] = (val == 0 ) ? 0 : scoreFromSingles[getCurrentPlayer()] + val;
-    }
-
-    ///   scoreFromSingles Functions   ///
-
-
-    ///   Running and Turn Score   ///
-    unsigned getRunningScore()
-    {
-        unsigned runningScore = permanentScore[getCurrentPlayer()] + scoreFromSingles[getCurrentPlayer()] + scoreFromMultiples[getCurrentPlayer()];
+        unsigned runningScore = permanentScore.at(getCurrentPlayerPosition()) + turnScore.at(getCurrentPlayerPosition());
         return runningScore;
     }
-    unsigned getTurnScore()
+    unsigned getTurnScore() const
     {
-        return turnScore[getCurrentPlayer()];
+        return turnScore.at(getCurrentPlayerPosition());
     }
-    void setTurnScores(unsigned val)
+    void setTurnScore(const unsigned val )
     {
-        turnScore[getCurrentPlayer()] = (val == 0) ? 0 : turnScore[getCurrentPlayer()] + val;
-        setScoreFromSingles(0);
-        setScoreFromMultiples(0);
+        if ( val == 0 )
+            turnScore.at(getCurrentPlayerPosition()) = 0;
+        else
+            turnScore.at(getCurrentPlayerPosition()) += val;
     }
 
-    ///   All time Permanent turnScore   ///
-    unsigned getPermanentScore( const std::string& player = "" )
+    ///   All time Permanent turnScore PERMANENTSCORE   ///
+    unsigned getPermanentScore(const unsigned i = 0 ) const
     {
-        return permanentScore[(!player.empty() ? player : getCurrentPlayer())];
+        if ( i != 0 )
+            return permanentScore.at(i);
+        return permanentScore.at(getCurrentPlayerPosition());
     }
-    void setPermanentScore ( unsigned val, bool INIT = false )
+    void setPermanentScore (const unsigned val )
     {
-        if (!INIT) {
-            if (getRunningScore() >= 1000)
-                permanentScore[getCurrentPlayer()] += val;
+        if ((getRunningScore() >= 1000 ) || (val == 0 ) )
+        {
+            if ( val == 0 )
+                permanentScore.at(getCurrentPlayerPosition()) = 0;
+            else
+                permanentScore.at(getCurrentPlayerPosition()) += val;
         }
-        else permanentScore[getCurrentPlayer()] = 0;
     }
 
-    ///  Gets the Highest Score   ///
-    static std::string getHighestScoringPlayer( zilch& game) {
-        std::string playerWithHighestScore;
-        for ( const auto & player : game.getPlayers())
-            for ( const auto & player2 : game.getPlayers())
-                if (game.getPermanentScore( player2 ) > game.getPermanentScore( player ) )
-                    playerWithHighestScore = player2;
-        return playerWithHighestScore;
+    ///   Global Variable containing the players PLAYERS   ///
+    std::string getPlayers()
+    {
+        return players.at(getCurrentPlayerPosition());
     }
-
-    ///   Global Variable containing the players   ///
-    std::string getPlayer ( unsigned i )
+    std::string getPlayers (const unsigned i )
     {
         return players.at(i);
     }
-    std::vector<std::string> getPlayers()
-    {
-        return players;
-    }
-    void setPlayer ( unsigned i, std::string& player )
+    void setPlayers (const unsigned i, const std::string& player )
     {
         players.at(i) = player;
     }
@@ -325,19 +242,16 @@ public:
     ************************/
 private:
     unsigned long numOfDiceInPlay = 6; // Number of dice
-    std::string currentPlayer;
+    unsigned currentPlayerPosition = 0; // loops through/keeps track of current player throughout program
+    unsigned numOfPrevMultiples = 0; // Contains number of multiples chosen (0-2)
     unsigned valOfChosenMultiple = 0; // Possible Multiple Add-on choice
     unsigned valOfAvailableMultiple = 0;
     unsigned bust50 = 0;
     unsigned amountOfPlayers = 2;
     unsigned scoreLimit = 2000;
-    bool optionSelected = false;
-    bool continueSelecting = true;
-    std::map<unsigned, unsigned> diceSetMap;
-    std::map<std::string, unsigned> scoreFromSingles; // This is used as the general turn score when logging or the score other than that of multiples during regular turn operation
-    std::map<std::string, unsigned> scoreFromMultiples;
-    std::map<std::string, unsigned> turnScore;
-    std::map<std::string, unsigned> permanentScore;
+    std::vector<unsigned> diceSetVector = {0};
+    std::vector<unsigned> turnScore = {0};
+    std::vector<unsigned> permanentScore = {0};
     std::vector<std::string> players = {""};
 };
 
