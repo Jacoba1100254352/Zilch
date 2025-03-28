@@ -1,12 +1,11 @@
-// Main.cpp
+// main.cpp
 
 #include "GameManager.h"
 
 int main() {
-    // Create an instance of the ZilchGame class
     GameManager game;
 
-    game.playGame();
+    game.run();  // Run the main state machine loop
 
     return 0;
 }

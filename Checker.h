@@ -1,58 +1,34 @@
 // Checker.h
 
-#ifndef ZILCH_CHECKER_H
-#define ZILCH_CHECKER_H
+#ifndef CHECKER_H
+#define CHECKER_H
 
 #include <cstdint>
 #include <iostream>
 
-class GameManager;
+class GameManager;  // Forward declare to avoid circular dependency.
 
 class Checker {
 public:
-    explicit Checker(GameManager& game) : game(game) {} // Constructor initializes the member variable
+    explicit Checker(GameManager& game) : game(game) {}
 
-    void handleFirstRollBust() const;
-
-    void handleBust() const;
-
-    [[nodiscard]] std::vector<uint16_t> displayMenuOptions() const;
-
-    static void ignoreRemainingInput();
-
-    void check() const;
-
-    void checkUserInput() const;
-
-    void checkStraits() const;
-
-    void checkSet() const;
-
-    void checkMultiple(uint16_t dieValue) const;
-
-    void checkSingle(uint16_t dieValue) const;
-
+    // Evaluate possible scoring options, handle bust, etc.
+    [[nodiscard]] bool hasValidOption() const;
     [[nodiscard]] bool isStrait() const;
-
     [[nodiscard]] bool isSet() const;
+    [[nodiscard]] bool isMultipleAvailable() const;
+    [[nodiscard]] bool isSingleAvailable() const;
 
-    [[nodiscard]] bool isMultiple() const;
+    void handleBust(bool isFirstRoll) const;
+    void handleStrait() const;
+    void handleSet() const;
+    void handleMultiple(uint16_t dieValue) const;
+    void handleSingle(uint16_t dieValue) const;
 
-    [[nodiscard]] bool isDesiredMultipleAvailable(uint16_t desiredMultiple) const;
-
-    [[nodiscard]] bool canAddMultiples() const;
-
-    [[nodiscard]] bool isSingle(uint16_t single) const;
-
-    // OptionAvailability
-    [[nodiscard]] bool isOptionAvailable() const;
+    void getCurrentPlayer() const;
 
 private:
-    GameManager& game; // Member variable holding a reference to the GameManager instance
-
-    // Input Functions
-    static void displayImpossibleOptionMessage();
+    GameManager& game;
 };
 
-
-#endif //ZILCH_CHECKER_H
+#endif // CHECKER_H

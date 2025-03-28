@@ -15,28 +15,27 @@
 ********************/
 
 ///   BUST   ///
-void Checker::handleFirstRollBust() const
+void Checker::handleBust(const bool isFirstRoll) const
 {
-    // bust UI
-    game.getCurrentPlayer()->getDice().displayDice();
-    std::cout << "\nYou have busted on the first roll, try again" << std::endl;
-    pauseAndContinue();
+    if (isFirstRoll) {
+        // bust UI
+        game.getCurrentPlayer()->getDice().displayDice();
+        std::cout << "\nYou have busted on the first roll, try again" << std::endl;
+        pauseAndContinue();
 
-    // Turn and Score updates
-    game.getCurrentPlayer()->getScore().increaseRoundScore(50);
-    game.setTurnContinuationStatus(true, true);
-}
+        // Turn and Score updates
+        game.getCurrentPlayer()->getScore().increaseRoundScore(50);
+        game.setTurnContinuationStatus(true, true);
+    } else {
+        // bust UI
+        game.getCurrentPlayer()->getDice().displayDice();
+        std::cout << "\nYou have busted" << std::endl;
+        pauseAndContinue();
 
-void Checker::handleBust() const
-{
-    // bust UI
-    game.getCurrentPlayer()->getDice().displayDice();
-    std::cout << "\nYou have busted" << std::endl;
-    pauseAndContinue();
-
-    // Turn and Score updates
-    game.getCurrentPlayer()->getScore().setRoundScore(0);
-    game.setTurnContinuationStatus(false, true);
+        // Turn and Score updates
+        game.getCurrentPlayer()->getScore().setRoundScore(0);
+        game.setTurnContinuationStatus(false, true);
+    }
 }
 
 ///   OTHER   ///

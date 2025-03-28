@@ -1,286 +1,319 @@
 // GameManager.cpp
-
 #include "GameManager.h"
+#include <algorithm>
+#include <random>
 #include "Checker.h"
-#include "GameUI.h"
 
-
-void GameManager::initializeRollCycle()
-{
-    /***
-     * Initialize each segment of 6-dice re-rolls
-     */
-
-    turnContinuationStatus = true;
-    selectedOptionStatus = false; // No option has yet be selected
-    selectionContinuationStatus = true; // Can continue/start selecting // TODO: May need to be set to false
-
-    valueOfChosenMultiple = 0;
-
-    // Initialize Score
-    currentPlayer->getScore().setScoreFromMultiples(0);
+////////////////////////////////////
+//        UTILITY FUNCTIONS
+////////////////////////////////////
+static void clearScreen() {
+    std::cout << "\033[2J\033[1;1H";
 }
 
-void GameManager::playGame()
-{
-    displayGameInfo();
-    pauseAndContinue();
+static void pauseAndContinue() {
+    std::cout << "Press ENTER to continue...";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 
-    clear();
+////////////////////////////////////
+//       Dice Implementation
+////////////////////////////////////
+void Dice::rollDice() {
+    diceSetMap.clear();
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<> dist(1, 6);
 
-    // Setup Players
-    enterAndAddPlayers();
-    enterAndSetScoreLimit();
-
-    while (true) {
-        for (Player& player : players) {
-            // Check and manage game-end condition
-            if (player.getScore().getPermanentScore() >= player.getScore().getScoreLimit()) {
-                manageLastTurnOpportunity();
-                manageTiedEnding();
-                return;
-            }
-
-            // Play Turn
-            currentPlayer = &player;
-            manageDiceCount(FULL_SET_OF_DICE);
-            while (turnContinuationStatus) {
-                currentPlayer->getDice().rollDice();
-                Checker(*this).check();
-            }
-        }
+    for (int i = 0; i < numDiceInPlay; ++i) {
+        auto val = static_cast<uint16_t>(dist(mt));
+        diceSetMap[val]++;
     }
 }
 
-void GameManager::manageLastTurnOpportunity()
-{
-    Player* gameEndingPlayer = currentPlayer;
-
-    std::cout << gameEndingPlayer->getName() << " is over " << gameEndingPlayer->getScore().getScoreLimit() << std::endl
-        << "Everyone else has one more chance to win" << std::endl;
-    pauseAndContinue();
-    std::cout << "\n" << std::endl;
-
-    switchToNextPlayer();
-
-    do {
-        std::cout << "It is " << currentPlayer->getName() << "'s last turn" << std::endl;
-        manageDiceCount(FULL_SET_OF_DICE);
-
-        while (turnContinuationStatus) {
-            gameEndingPlayer->getScore().displayHighScoreInfo(currentPlayer->getName(), gameEndingPlayer->getName());
-            currentPlayer->getDice().rollDice();
-            Checker(*this).check();
+void Dice::displayDice() const {
+    std::cout << "Dice in play: " << numDiceInPlay << "\n";
+    std::cout << "Rolled: ";
+    for (const auto & [fst, snd] : diceSetMap) {
+        for (int i = 0; i < snd; i++) {
+            std::cout << fst << ' ';
         }
-
-        switchToNextPlayer();
-    } while (currentPlayer != gameEndingPlayer);
+    }
+    std::cout << "\n";
 }
 
-void GameManager::manageTiedEnding()
+////////////////////////////////////
+//      GameManager Implementation
+////////////////////////////////////
+GameManager::GameManager()
+    : currentState(ZilchGameState::SETUP),
+      currentPlayerIndex(0)
 {
-    Player* playerWithHighestScore = findHighestScoringPlayer();
-    const uint32_t highestScore = playerWithHighestScore->getScore().getPermanentScore();
-    std::vector<Player*> tie;
+    // Possibly do other init here...
+}
 
-    for (Player& player : players)
-        if (player.getScore().getPermanentScore() == highestScore)
-            tie.emplace_back(&player);
+Player& GameManager::getCurrentPlayer() {
+    return players[currentPlayerIndex];
+}
 
-    if (tie.size() > 1) {
-        for (size_t i = 0; i < tie.size(); ++i) {
-            std::cout << tie[i]->getName();
-            if (i != tie.size() - 1)
-                std::cout << ((i == tie.size() - 2) ? " and " : ", ");
+void GameManager::switchToNextPlayer() {
+    currentPlayerIndex = static_cast<int>((currentPlayerIndex + 1) % players.size());
+}
+
+bool GameManager::isGameOver() const {
+    // Example: If any player meets or exceeds score limit, set game over.
+    // In practice, you might store a boolean or a dedicated check.
+    return std::ranges::any_of(players, [](const Player& p) {
+        return p.score.perm >= p.score.limit;
+    });
+}
+
+////////////////////////////////////
+//       Main Run Function
+////////////////////////////////////
+void GameManager::run() {
+    // The main game loop: keep transitioning states until GAME_OVER
+    while (currentState != ZilchGameState::GAME_OVER) {
+        switch (currentState) {
+            case ZilchGameState::SETUP:          doSetupState();      break;
+            case ZilchGameState::BEGIN_TURN:     doBeginTurn();       break;
+            case ZilchGameState::ROLL_DICE:      doRollDice();        break;
+            case ZilchGameState::CHECK_OPTIONS:  doCheckOptions();    break;
+            case ZilchGameState::SELECT_OPTION:  doSelectOption();    break;
+            case ZilchGameState::APPLY_SCORE:    doApplyScore();      break;
+            case ZilchGameState::END_TURN:       doEndTurn();         break;
+            case ZilchGameState::CHECK_GAME_END: doCheckGameEnd();    break;
+            case ZilchGameState::LAST_TURN:      doLastTurn();        break;
+            case ZilchGameState::GAME_OVER:      /* no-op */          break;
         }
-        std::cout << " have tied with " << highestScore << " Points!" << std::endl;
-    } else std::cout << playerWithHighestScore->getName() << " won with " << highestScore << " Points!" << std::endl;
+    }
+
+    clearScreen();
+    std::cout << "Game Over! Final scores:\n";
+    for (auto &p : players) {
+        std::cout << p.name << " => " << p.score.perm << "\n";
+    }
+    std::cout << "Thanks for playing!\n";
 }
 
-/*******************
-*   DICE HELPERS   *
-*******************/
+////////////////////////////////////
+//         State Handlers
+////////////////////////////////////
 
-void GameManager::manageDiceCount(uint16_t numOfDice)
-{
-    if (numOfDice == 0)
-        numOfDice = FULL_SET_OF_DICE;
-
-    currentPlayer->getDice().setNumDiceInPlay(numOfDice);
-
-    if (numOfDice == FULL_SET_OF_DICE)
-        initializeRollCycle();
-}
-
-/*****************************
-*   PLAYER SETUP FUNCTIONS   *
-*****************************/
-
-///   Player Setup   ///
-static uint16_t getNumberOfPlayers()
-{
-    // Variables
-    uint16_t numPlayers;
-
-    // Enter and Validate numPlayers
-    while (true) {
-        std::cout << "Enter the number of players (1-6): ";
-        std::cin >> numPlayers;
-
-        // Exit on correct input
-        if (!std::cin.fail() && 1 <= numPlayers && numPlayers <= 6)
-            break;
-
-        // Re-input
-        std::cout << "Invalid number of players. Please try again." << std::endl;
+/**
+ * SETUP: Let user enter # of players, names, and the score limit.
+ */
+void GameManager::doSetupState() {
+    clearScreen();
+    std::cout << "\nHow many players? (1-6): ";
+    int n = 0;
+    std::cin >> n;
+    if(!std::cin || n < 1 || n > 6) {
         std::cin.clear();
-        std::cin.ignore(std::numeric_limits<int>::max(), '\n');
-    }
-
-    return numPlayers;
-}
-
-void GameManager::enterAndAddPlayers()
-{
-    const uint16_t numPlayers = getNumberOfPlayers();
-
-    players.clear(); // Clears any previous players
-    for (uint16_t i = 0; i < numPlayers; i++) {
-        std::string playerName;
-        std::cout << "Enter the name of player " << i + 1 << ": ";
-        std::cin >> playerName;
-        addPlayer(playerName);
-    }
-
-    // Initialize currentPlayer to be the first player
-    currentPlayer = &players.at(0);
-}
-
-void GameManager::addPlayer(const std::string& playerName)
-{
-    players.emplace_back(playerName); // Pass this GameManager instance to the player
-}
-
-///   Player Sequencing   ///
-Player* GameManager::getCurrentPlayer() const
-{
-    return currentPlayer;
-}
-
-void GameManager::switchToNextPlayer()
-{
-    static size_t currentPlayerIndex = 0;
-    currentPlayerIndex = ++currentPlayerIndex % players.size();
-    currentPlayer = &players[currentPlayerIndex];
-}
-
-///   Score Limit and Highest Score   ///
-void GameManager::enterAndSetScoreLimit()
-{
-    // Variables
-    uint32_t limit;
-
-    // Enter and Validate scoreLimit
-    while (true) {
-        constexpr uint32_t MIN_SCORE_LIMIT = 1000;
-        std::cout << "\nEnter the score limit (minimum " << MIN_SCORE_LIMIT << "): ";
-        std::cin >> limit;
-
-        // Exit on correct input
-        if (!std::cin.fail() && limit >= MIN_SCORE_LIMIT)
-            break;
-
-        // Re-input
-        std::cout << "Invalid score limit. Please try again." << std::endl;
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<int>::max(), '\n');
-    }
-
-    // Assign scoreLimit per player
-    for (Player& player : players)
-        player.getScore().setScoreLimit(limit);
-}
-
-Player* GameManager::findHighestScoringPlayer()
-{
-    Player* highestScoringPlayer = currentPlayer;
-    for (Player& player : players)
-        if (player.getScore().getPermanentScore() > highestScoringPlayer->getScore().getPermanentScore())
-            highestScoringPlayer = &player;
-    return highestScoringPlayer;
-}
-
-/****************************
-*   GET AND SET FUNCTIONS   *
-****************************/
-
-///   Chosen Multiple   ///
-uint16_t GameManager::getValueOfChosenMultiple() const
-{
-    return valueOfChosenMultiple;
-}
-
-void GameManager::setValueOfChosenMultiple(const uint16_t chosenMultipleValue)
-{
-    valueOfChosenMultiple = chosenMultipleValue;
-}
-
-///   Option Status   ///
-bool GameManager::getSelectedOptionStatus() const
-{
-    return selectedOptionStatus;
-}
-
-void GameManager::setSelectedOptionStatus(const bool isOptionSelected)
-{
-    selectedOptionStatus = isOptionSelected;
-}
-
-///   Turn Continuation Status   ///
-bool GameManager::getTurnContinuationStatus() const
-{
-    return turnContinuationStatus;
-}
-
-void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust)
-{
-    // If continueTurn is true or isBust is true, we continue with the current status
-    if (isBust) {
-        turnContinuationStatus = continueTurn;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cout << "Invalid number, try again.\n";
         return;
     }
 
-    // We opted to stop: Now, we know that both continueTurn and isBust are false.
-
-    // Greater than or equal to 1000: log and end turn
-    if (Score& score = currentPlayer->getScore(); score.getRoundScore() >= 1000) {
-        score.increasePermanentScore(score.getRoundScore());
-        score.setRoundScore(0); // Reset Round Score
-        std::cout << std::endl << currentPlayer->getName() << "'s permanent score has been logged and is now: " << score.getPermanentScore() << std::endl << std::endl;
-        currentPlayer->getDice().setNumDiceInPlay(0);
-        // else if: No option selected and not above 1000: select an option
-    } else if (!selectedOptionStatus) {
-        std::cout << "You are not allowed to end without a permanent or running score higher than 1000" << std::endl;
-        continueTurn = true;
-        //pauseAndContinue();
-        //printInstructions(game, REENTER);
+    players.clear();
+    for(int i = 1; i <= n; i++) {
+        std::string name;
+        std::cout << "Enter name for player " << i << ": ";
+        std::cin >> name;
+        players.emplace_back(name);
     }
 
-    // Set the turn continuation status
-    turnContinuationStatus = continueTurn;
-}
-
-///   Selection Status   ///
-bool GameManager::getSelectionContinuationStatus() const
-{
-    return selectionContinuationStatus;
-}
-
-void GameManager::setSelectionContinuationStatus(bool continueSelecting)
-{
-    if (!continueSelecting && !selectedOptionStatus) {
-        std::cout << "You must select at least one option" << std::endl;
-        continueSelecting = true;
+    // Score limit
+    uint32_t limit;
+    std::cout << "Enter score limit (>=1000): ";
+    std::cin >> limit;
+    if (!std::cin || limit < 1000) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cout << "Invalid limit, setting to 2000.\n";
+        limit = 2000;
     }
-    selectionContinuationStatus = continueSelecting;
+
+    for (auto &p : players) {
+        p.score.limit = limit;
+    }
+    pauseAndContinue();
+    currentState = ZilchGameState::BEGIN_TURN;
+}
+
+/**
+ * BEGIN_TURN: Reset round score to 0, handle any pre-roll logic
+ */
+void GameManager::doBeginTurn() {
+    clearScreen();
+    Player &p = getCurrentPlayer();
+    std::cout << "======== BEGIN TURN ========\n";
+    std::cout << p.name << "'s turn!\n";
+    p.score.round = 0;       // reset round score
+    p.score.multiple = 0;    // reset multiple
+    p.dice.setNumDiceInPlay(6); // restore to 6 dice if needed
+
+    pauseAndContinue();
+    currentState = ZilchGameState::ROLL_DICE;
+}
+
+/**
+ * ROLL_DICE: Actually roll
+ */
+void GameManager::doRollDice() {
+    clearScreen();
+    Player &p = getCurrentPlayer();
+    p.dice.rollDice();
+    p.dice.displayDice();
+
+    pauseAndContinue();
+    currentState = ZilchGameState::CHECK_OPTIONS;
+}
+
+/**
+ * CHECK_OPTIONS: Evaluate possible scoring/bust
+ * (Here we might use `Checker` to see if any scoring combos exist.)
+ */
+void GameManager::doCheckOptions() {
+    clearScreen();
+    // For brevity, just pretend we check bust conditions, etc.
+    // If bust: round=0 => go to END_TURN
+    // Otherwise => SELECT_OPTION
+    const Checker c(*this);
+
+    // Example check (not a full logic):
+    const bool hasOption = c.hasValidOption();
+    const bool firstRollBust = (getCurrentPlayer().dice.getNumDiceInPlay() == 6
+                          && getCurrentPlayer().score.round == 0
+                          && !hasOption);
+
+    if (firstRollBust) {
+        std::cout << "Oh no, first roll bust!\n";
+        c.handleBust(/*isFirstRoll=*/true);
+        currentState = ZilchGameState::END_TURN;
+    }
+    else if(!hasOption) {
+        std::cout << "Bust! No valid moves.\n";
+        c.handleBust(/*isFirstRoll=*/false);
+        currentState = ZilchGameState::END_TURN;
+    }
+    else {
+        std::cout << "You have some valid scoring options.\n";
+        pauseAndContinue();
+        currentState = ZilchGameState::SELECT_OPTION;
+    }
+}
+
+/**
+ * SELECT_OPTION: The player chooses what to do (take single, multiple, etc.) or end turn
+ * If they choose a scoring action, transition to APPLY_SCORE
+ * If they want to end turn, go to END_TURN
+ * If they want to roll again, go back to ROLL_DICE
+ */
+void GameManager::doSelectOption() {
+    clearScreen();
+    Player &p = getCurrentPlayer();
+    std::cout << "======== SELECT OPTION ========\n";
+    std::cout << p.name << "'s current round score: " << p.score.round << "\n";
+
+    std::cout << "Menu:\n";
+    std::cout << "1) Take Single (1 or 5)\n";
+    std::cout << "2) Take Multiple\n";
+    std::cout << "3) End Turn\n";
+    std::cout << "4) Roll Again\n";
+    std::cout << "Choice: ";
+
+    int choice;
+    std::cin >> choice;
+    if(!std::cin) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        choice = 0;
+    }
+
+    switch(choice) {
+    case 1:
+    case 2:
+        // We’ll do actual scoring in APPLY_SCORE.
+        currentState = ZilchGameState::APPLY_SCORE;
+        break;
+    case 3:
+        // End turn
+        currentState = ZilchGameState::END_TURN;
+        break;
+    case 4:
+        // Roll again
+        currentState = ZilchGameState::ROLL_DICE;
+        break;
+    default:
+        std::cout << "Invalid choice, try again.\n";
+        pauseAndContinue();
+        // remain in SELECT_OPTION
+        break;
+    }
+}
+
+/**
+ * APPLY_SCORE: Actually apply the chosen score, remove dice, etc.
+ */
+void GameManager::doApplyScore() {
+    clearScreen();
+    Checker c(*this);
+
+    // For brevity, let's just call some "simulate scoring" method
+    // In practice, you'd ask the user what they chose: single, set, multiple, etc.
+    // Then call c.handleSingle(dieValue) or c.handleMultiple(dieValue).
+
+    // As an example:
+    std::cout << "Applying a pretend +100 to round score.\n";
+    getCurrentPlayer().score.round += 100;
+
+    // Check if the player can continue selecting more combos or not...
+    // If no dice remain or no combos remain => might end turn automatically, etc.
+
+    pauseAndContinue();
+    currentState = ZilchGameState::SELECT_OPTION;
+    // or ROLL_DICE if you want them to roll again automatically
+}
+
+/**
+ * END_TURN: If the player's round >= 1000, add to permanent. Move on.
+ */
+void GameManager::doEndTurn() {
+    clearScreen();
+    Player &p = getCurrentPlayer();
+    // If we have 1000 or more for round, we store it permanently
+    if (p.score.round >= 1000) {
+        p.score.perm += p.score.round;
+        std::cout << p.name << " banks " << p.score.round
+                  << " points for a total of " << p.score.perm << "\n";
+    } else {
+        std::cout << p.name << " ended turn with < 1000 => no bank.\n";
+    }
+    p.score.round = 0;
+
+    pauseAndContinue();
+    currentState = ZilchGameState::CHECK_GAME_END;
+}
+
+/**
+ * CHECK_GAME_END: See if the game is over, or if we proceed to next turn
+ */
+void GameManager::doCheckGameEnd() {
+    if (isGameOver()) {
+        // Optionally let every other player get a last turn => LAST_TURN
+        currentState = ZilchGameState::LAST_TURN;
+    } else {
+        // Keep playing
+        switchToNextPlayer();
+        currentState = ZilchGameState::BEGIN_TURN;
+    }
+}
+
+void GameManager::doLastTurn() {
+    // Example: everyone but the leading player gets one more turn
+    // For simplicity, we’ll just say “game over”
+    std::cout << "Someone exceeded the limit => last turn triggered, but skipping for brevity.\n";
+    pauseAndContinue();
+    currentState = ZilchGameState::GAME_OVER;
 }

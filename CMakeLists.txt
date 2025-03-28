@@ -17,4 +17,5 @@ add_executable(Zilch
         Score.h
         GameUI.h
         GameUI.cpp
-        PlatformDefinitions.h)
+        PlatformDefinitions.h
+        ZilchStates.h)
