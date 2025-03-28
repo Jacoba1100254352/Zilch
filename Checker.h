@@ -16,7 +16,7 @@ public:
 
     void handleBust() const;
 
-    static void displayMenuOptions();
+    [[nodiscard]] std::vector<uint16_t> displayMenuOptions() const;
 
     static void ignoreRemainingInput();
 

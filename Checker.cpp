@@ -83,22 +83,26 @@ void Checker::checkUserInput() const
         clear(); // Clear screen.
 
         // Print instructions based on game status
-        if (!game.getSelectedOptionStatus())
-            printInstructions(game, GameManager::ENTER);
-        else if (isOptionAvailable())
-            printInstructions(game, GameManager::NEXT);
-        else
+        if (game.getSelectedOptionStatus() && !isOptionAvailable())
             break;
 
-        // Show a single main menu of possible moves
-        displayMenuOptions();
+        // Display a dynamic menu of only the valid moves
+        // Then map the user's selection to the correct "option code"
+        const auto validMenuCodes = displayMenuOptions();
 
         // Read user choice
-        uint16_t choice = 0;
-        std::cin >> choice;
+        uint16_t choiceIndex = 0;
+        std::cin >> choiceIndex;
         ignoreRemainingInput(); // Clear any leftover input
 
-        switch (choice) {
+        // Map choiceIndex -> actual option code (e.g., 1=Strait, 2=Set, etc.)
+        // If choiceIndex is invalid, show impossible message
+        if (choiceIndex == 0 || choiceIndex > validMenuCodes.size()) {
+            displayImpossibleOptionMessage();
+            continue;
+        }
+
+        switch (validMenuCodes[choiceIndex - 1]) {
             case 1: // Strait
                 if (isStrait()) {
                     checkStraits();
@@ -209,17 +213,72 @@ void Checker::checkUserInput() const
 *   MENU / DISPLAY FUNCTIONS   *
 *******************************/
 
-void Checker::displayMenuOptions()
+std::vector<uint16_t> Checker::displayMenuOptions() const
 {
-    std::cout << "\n=== Select an Option ===\n";
-    std::cout << "1) Take a strait (if available)\n";
-    std::cout << "2) Take a set (if available)\n";
-    std::cout << "3) Take/add multiples (3 or more of a kind)\n";
-    std::cout << "4) Take single 1 (if available)\n";
-    std::cout << "5) Take single 5 (if available)\n";
-    std::cout << "6) End turn (only valid if >= 1000 points)\n";
-    std::cout << "7) Roll again\n";
+    std::vector<uint16_t> validCodes;
+
+    game.getCurrentPlayer()->getScore().displayCurrentScore(game.getCurrentPlayer()->getName());
+    game.getCurrentPlayer()->getDice().displayDice();
+    std::cout << "\nEnter the option you wish to take\n";
+
+    // We'll keep a simple "incremented index" for display, but store "option codes" in validCodes.
+
+    // 1) Strait
+    if (isStrait()) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Take a strait\n";
+        validCodes.push_back(1);
+    }
+
+    // 2) Set
+    if (isSet()) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Take a set\n";
+        validCodes.push_back(2);
+    }
+
+    // 3) Multiple
+    //    This is valid if there's a multiple, or we can add to an existing multiple
+    if (isMultiple() || canAddMultiples()) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Take/add multiples (3 or more of a kind)\n";
+        validCodes.push_back(3);
+    }
+
+    // 4) Single 1
+    if (isSingle(1)) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Take single 1\n";
+        validCodes.push_back(4);
+    }
+
+    // 5) Single 5
+    if (isSingle(5)) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Take single 5\n";
+        validCodes.push_back(5);
+    }
+
+    // 6) End turn
+    //    Display if player has 1000+ or if no scoring option remains
+    {
+        const auto& score = game.getCurrentPlayer()->getScore();
+        if (const bool hasEnoughPoints = (score.getRoundScore() >= 1000 || score.getPermanentScore() >= 1000); hasEnoughPoints || !isOptionAvailable()) {
+            std::cout << "\t" << validCodes.size() + 1 << ") End turn\n";
+            validCodes.push_back(6);
+        }
+    }
+
+    // 7) Roll again
+    //    Show only if user selected something or if no option is available
+    if (game.getSelectedOptionStatus() || !isOptionAvailable()) {
+        std::cout << "\t" << validCodes.size() + 1 << ") Roll again\n";
+        validCodes.push_back(7);
+    }
+
+    if (validCodes.empty()) {
+        // If somehow we come here and there are truly no valid moves,
+        // let the user know or handle automatically
+        std::cout << "No valid moves remain.\n";
+    }
+
     std::cout << "Choice: ";
+    return validCodes;
 }
 
 void Checker::displayImpossibleOptionMessage()
@@ -303,7 +362,8 @@ void Checker::checkSingle(const uint16_t dieValue) const
     Score& score = currentPlayer->getScore();
 
     // If we can or must use the Multiple option automatically
-    if (auto& diceSetMap = currentPlayer->getDice().diceSetMap; (game.getValueOfChosenMultiple() == dieValue && canAddMultiples()) ||
+    if (auto& diceSetMap = currentPlayer->getDice().diceSetMap;
+        (game.getValueOfChosenMultiple() == dieValue && canAddMultiples()) ||
         (diceSetMap[dieValue] >= 3 && isMultiple()))
     {
         std::cout << "Automatically applying Multiple selection.\n";

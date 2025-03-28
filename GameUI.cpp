@@ -21,39 +21,6 @@ void displayGameInfo() {
               << std::endl;
 }
 
-void printInstructions(const GameManager &game, const uint16_t options) {
-    game.getCurrentPlayer()->getScore().displayCurrentScore(game.getCurrentPlayer()->getName());
-    game.getCurrentPlayer()->getDice().displayDice();
-
-    const std::string instructions = "\tSingles -- s#, \n\tMultiples -- m#, \n\tSet -- se, \n\tStrait -- st;\n";
-    std::string message = "Enter the option you wish to take";
-
-    if (game.getSelectedOptionStatus() && game.getCurrentPlayer()->getScore().getRoundScore() >= 1000)
-        message += ", or type 0 to end your turn: ";
-    else if (game.getSelectedOptionStatus())
-        message += ", or type 0 to roll again: ";
-    else message += ": ";
-
-    switch (options) {
-        case GameManager::ENTER:
-            std::cout << instructions << message << std::flush;
-            break;
-
-        case GameManager::NEXT:
-            message.replace(0, 5, "Please enter your next choice");
-            std::cout << instructions << message << std::flush;
-            break;
-
-        case GameManager::REENTER:
-            message.replace(0, 5, "Please re-enter the option you wish to take");
-            std::cout << instructions << message << std::flush;
-            break;
-
-        default:
-            throw std::invalid_argument("Invalid enumeration, File: " + std::string(__FILE_NAME__) + ", Line: " + std::to_string(__LINE__));
-    }
-}
-
 void clear() {
     std::cout << "\033[2J\033[1;1H";
 }
