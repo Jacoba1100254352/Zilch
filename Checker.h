@@ -16,15 +16,9 @@ public:
 
     void handleBust() const;
 
-    void printPossibleMultipleAddition() const;
+    static void displayMenuOptions();
 
     static void ignoreRemainingInput();
-
-    [[nodiscard]] bool enterEndTurnOption(uint16_t &playOrEndTurn) const;
-
-    void updateGameStatus(uint16_t playOrEndTurn) const;
-
-    void handleNoOptionsLeft() const;
 
     void check() const;
 
@@ -37,8 +31,6 @@ public:
     void checkMultiple(uint16_t dieValue) const;
 
     void checkSingle(uint16_t dieValue) const;
-
-    void applyPossibleOptions() const;
 
     [[nodiscard]] bool isStrait() const;
 
@@ -55,24 +47,10 @@ public:
     // OptionAvailability
     [[nodiscard]] bool isOptionAvailable() const;
 
-    void readInput(std::istream& input) const;
-
 private:
     GameManager& game; // Member variable holding a reference to the GameManager instance
 
     // Input Functions
-    void executeSelection(uint16_t val) const;
-
-    void executeSecondaryCommand(std::istream& input) const;
-
-    [[nodiscard]] bool canProcessMultiple(uint16_t val) const;
-
-    void handleFailedMultiple(uint16_t chosenMultiple) const;
-
-    void processZeroCommand() const;
-
-    void displayPossibleOptions() const;
-
     static void displayImpossibleOptionMessage();
 };
 

@@ -39,53 +39,11 @@ void Checker::handleBust() const
     game.setTurnContinuationStatus(false, true);
 }
 
-///   MULTIPLE   ///
-void Checker::printPossibleMultipleAddition() const
-{
-    if (canAddMultiples() && (game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200))
-        std::cout << "You can add to your multiple of " << game.getValueOfChosenMultiple() << "!\n";
-}
-
 ///   OTHER   ///
 void Checker::ignoreRemainingInput()
 {
     std::cin.clear();
     std::cin.ignore(std::numeric_limits<int>::max(), '\n');
-}
-
-bool Checker::enterEndTurnOption(uint16_t &playOrEndTurn) const
-{
-
-    // Enter Decision
-    std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
-    std::cin >> playOrEndTurn;
-
-    // Handle incorrect input
-    while (std::cin.fail() || playOrEndTurn < 0 || 2 < playOrEndTurn) {
-        clear();
-        std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<int>::max(), '\n');
-        std::cin >> playOrEndTurn;
-    }
-
-    return (playOrEndTurn == 2) && (game.getCurrentPlayer()->getScore().getRoundScore() >= 1000);
-}
-
-void Checker::updateGameStatus(const uint16_t playOrEndTurn) const
-{
-    game.setTurnContinuationStatus(playOrEndTurn != 2);
-    game.setSelectionContinuationStatus(playOrEndTurn == 1);
-}
-
-void Checker::handleNoOptionsLeft() const
-{
-    clear();
-    game.getCurrentPlayer()->getScore().displayCurrentScore(game.getCurrentPlayer()->getName());
-    // TODO: May be unnecessary
-    game.getCurrentPlayer()->getDice().displayDice();
-    std::cout << "\nThere are no options left";
-    pauseAndContinue();
 }
 
 /************
@@ -98,7 +56,8 @@ void Checker::check() const
     const Dice& dice = currentPlayer->getDice();
     const Score& score = currentPlayer->getScore();
 
-    //    clear();
+    // Prepare for user input
+    // clear();
     game.setSelectedOptionStatus(false);
 
     // Handle Busts or full-hand dice re-rolls
@@ -118,49 +77,165 @@ void Checker::check() const
 void Checker::checkUserInput() const
 {
     Player* const& currentPlayer = game.getCurrentPlayer();
-    const Score& score = currentPlayer->getScore();
+    Score& score = currentPlayer->getScore();
 
     do {
         clear(); // Clear screen.
 
-        printPossibleMultipleAddition(); // Display options for multiple addition.
-
-        // Print instructions based on game status.
+        // Print instructions based on game status
         if (!game.getSelectedOptionStatus())
             printInstructions(game, GameManager::ENTER);
         else if (isOptionAvailable())
             printInstructions(game, GameManager::NEXT);
-        else break;
+        else
+            break;
 
-        ignoreRemainingInput(); // Clear remaining input.
-        readInput(std::cin); // Read user input.
+        // Show a single main menu of possible moves
+        displayMenuOptions();
 
-        // Process scoring and end of turn options.
-        if (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000) {
-            score.displayHighScoreInfo(currentPlayer->getName(), game.findHighestScoringPlayer()->getName());
+        // Read user choice
+        uint16_t choice = 0;
+        std::cin >> choice;
+        ignoreRemainingInput(); // Clear any leftover input
 
-            // Handle end turn decision.
-            if (uint16_t playOrEndTurn = 0; enterEndTurnOption(playOrEndTurn)) {
-                // Since enterEndTurnOption() returned true, the user chose to end the turn.
-                if (playOrEndTurn == 2 && (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000))
-                    applyPossibleOptions();
-                updateGameStatus(playOrEndTurn);
-                clear(); // Clear screen.
+        switch (choice) {
+            case 1: // Strait
+                if (isStrait()) {
+                    checkStraits();
+                } else {
+                    displayImpossibleOptionMessage();
+                }
+                break;
+            case 2: // Set
+                if (isSet()) {
+                    checkSet();
+                } else {
+                    displayImpossibleOptionMessage();
+                }
+                break;
+            case 3: { // Multiple
+                uint16_t val = 0;
+                std::cout << "Enter the die value you'd like to use for a multiple (1..6): ";
+                std::cin >> val;
+                ignoreRemainingInput();
+                if ((val >= 1 && val <= 6 && (isMultiple() && isDesiredMultipleAvailable(val))) ||
+                    ((score.getScoreFromMultiples() >= 200) &&
+                     game.getValueOfChosenMultiple() == val && canAddMultiples()))
+                {
+                    checkMultiple(val);
+                } else {
+                    displayImpossibleOptionMessage();
+                }
+                break;
             }
+            case 4: // Single 1
+                if (isSingle(1)) {
+                    checkSingle(1);
+                } else {
+                    displayImpossibleOptionMessage();
+                }
+                break;
+            case 5: // Single 5
+                if (isSingle(5)) {
+                    checkSingle(5);
+                } else {
+                    displayImpossibleOptionMessage();
+                }
+                break;
+            case 6: // End turn
+            {
+                // Only allowed if roundScore >= 1000 or permanentScore >= 1000
+                if ((score.getRoundScore() >= 1000 || score.getPermanentScore() >= 1000) &&
+                    isOptionAvailable())
+                {
+                    // Increase permanent score and end turn
+                    score.increasePermanentScore(score.getRoundScore());
+                    std::cout << "Your official score is now: " << score.getPermanentScore() << std::endl;
+                    game.setTurnContinuationStatus(false);
+                } else if (!isOptionAvailable()) {
+                    // If no options left, end turn
+                    clear();
+                    game.setTurnContinuationStatus(false);
+                } else {
+                    clear();
+                    std::cout << "You cannot end without a score of at least 1000\n";
+                    pauseAndContinue();
+                }
+                break;
+            }
+            case 7: // Roll again
+                // If the user has selected an option previously, we stop selecting further
+                if (game.getSelectedOptionStatus()) {
+                    game.setSelectionContinuationStatus(false);
+                } else {
+                    // Trying to roll again with no selected scoring is only valid if no option is found
+                    if (!isOptionAvailable()) {
+                        clear();
+                    } else {
+                        clear();
+                        std::cout << "You must select at least one option before rolling again (or have no options)\n";
+                        pauseAndContinue();
+                    }
+                }
+                break;
+            default:
+                displayImpossibleOptionMessage();
+                break;
+        }
 
-            // Handle scenario where no options are left.
-        } else if (!isOptionAvailable())
-            handleNoOptionsLeft();
-    } while (game.getTurnContinuationStatus() && game.getSelectionContinuationStatus() && isOptionAvailable());
-    // Loop as long as options available and turn continues.
+        // If no options are left to pick (and we haven't ended), handle bust logic
+        if (!isOptionAvailable() && game.getTurnContinuationStatus()) {
+            if (currentPlayer->getDice().getNumDiceInPlay() == FULL_SET_OF_DICE &&
+                !score.getRoundScore()) {
+                handleFirstRollBust();
+            }
+            else if (currentPlayer->getDice().getNumDiceInPlay() >= 1) {
+                handleBust();
+            }
+            else {
+                std::cout << "\nYou have a full set of dice now" << std::endl;
+                pauseAndContinue();
+                game.manageDiceCount(FULL_SET_OF_DICE);
+            }
+        }
+
+    } while (game.getTurnContinuationStatus() &&
+             game.getSelectionContinuationStatus() &&
+             isOptionAvailable());
+    // Loop as long as the turn continues, the user can still select, and options remain.
 }
 
+/*******************************
+*   MENU / DISPLAY FUNCTIONS   *
+*******************************/
+
+void Checker::displayMenuOptions()
+{
+    std::cout << "\n=== Select an Option ===\n";
+    std::cout << "1) Take a strait (if available)\n";
+    std::cout << "2) Take a set (if available)\n";
+    std::cout << "3) Take/add multiples (3 or more of a kind)\n";
+    std::cout << "4) Take single 1 (if available)\n";
+    std::cout << "5) Take single 5 (if available)\n";
+    std::cout << "6) End turn (only valid if >= 1000 points)\n";
+    std::cout << "7) Roll again\n";
+    std::cout << "Choice: ";
+}
+
+void Checker::displayImpossibleOptionMessage()
+{
+    clear();
+    std::cout << "You have selected an impossible or unavailable option." << std::endl;
+    pauseAndContinue();
+}
+
+/*******************************
+*         SCORING LOGIC        *
+*******************************/
 
 void Checker::checkStraits() const
 {
-    if (!isStrait())
-        return;
-
+    if (!isStrait()) return;
     game.getCurrentPlayer()->getScore().increaseRoundScore(1000);
     game.getCurrentPlayer()->getDice().diceSetMap.clear();
     game.setSelectedOptionStatus(true);
@@ -168,9 +243,7 @@ void Checker::checkStraits() const
 
 void Checker::checkSet() const
 {
-    if (!isSet())
-        return;
-
+    if (!isSet()) return;
     game.getCurrentPlayer()->getScore().increaseRoundScore(1000);
     game.getCurrentPlayer()->getDice().diceSetMap.clear();
     game.setSelectedOptionStatus(true);
@@ -178,48 +251,43 @@ void Checker::checkSet() const
 
 void Checker::checkMultiple(const uint16_t dieValue) const
 {
-    // Variables
     Player* const& currentPlayer = game.getCurrentPlayer();
     Dice& dice = currentPlayer->getDice();
     Score& score = currentPlayer->getScore();
 
-    ///   MULTIPLE   ///
     if (isMultiple() && dice.diceSetMap[dieValue] >= 3) {
-        // Error Checking
+        // Check for dice overflow
         if (dice.diceSetMap[dieValue] > FULL_SET_OF_DICE)
             throw std::out_of_range(
-                "Error: You have " + std::to_string(dice.diceSetMap[dieValue]) +
-                " dice. \nYou cannot have more than 6 dice."
+                "Error: " + std::to_string(dice.diceSetMap[dieValue]) +
+                " dice cannot exist. Max is 6."
             );
 
-        // Variables
         const uint16_t baseScore = (dieValue == 1) ? 1000 : dieValue * 100;
         const uint16_t numMultiples = dice.diceSetMap[dieValue] - 3;
-        const auto mScore = static_cast<uint16_t>(pow(2, numMultiples) * baseScore);
+        const auto mScore = static_cast<uint16_t>(std::pow(2, numMultiples) * baseScore);
 
-        // Handle Multiples Found
         score.setScoreFromMultiples(mScore);
         score.increaseRoundScore(mScore);
         game.setValueOfChosenMultiple(dieValue);
 
-        ///   ADDING MULTIPLE   ///
     } else if (canAddMultiples()) {
-        // Error Checking
-        if ((score.getScoreFromMultiples() < 200) || (dice.diceSetMap[dieValue] > 3))
+        // Check for dice overflow
+        if (score.getScoreFromMultiples() < 200 || (dice.diceSetMap[dieValue] > 3))
             throw std::out_of_range(
-                "Error: You must have had a multiple selected and cannot have more than 6 dice or 3 added multiples"
+                "Error: Multiple selection invalid."
             );
 
-        // Variables
-        const auto mScore = static_cast<uint16_t>(pow(2, dice.diceSetMap[dieValue]) * score.getScoreFromMultiples());
+        const auto mScore = static_cast<uint16_t>(
+            std::pow(2, dice.diceSetMap[dieValue]) * score.getScoreFromMultiples()
+        );
 
-        // Handle Adding Multiple
-        score.increaseRoundScore(mScore - score.getScoreFromMultiples()); // Subtract to avoid double adding
+        score.increaseRoundScore(mScore - score.getScoreFromMultiples());
         score.setScoreFromMultiples(mScore);
     } else return;
 
     // Multiple Updates (adding and regular)
-    game.manageDiceCount(currentPlayer->getDice().getNumDiceInPlay() - dice.diceSetMap[dieValue]);
+    game.manageDiceCount(dice.getNumDiceInPlay() - dice.diceSetMap[dieValue]);
     dice.eliminateDice(dieValue);
     dice.calculateMultipleAvailability();
     game.setSelectedOptionStatus(true);
@@ -227,22 +295,21 @@ void Checker::checkMultiple(const uint16_t dieValue) const
 
 void Checker::checkSingle(const uint16_t dieValue) const
 {
-    // Error Checking
-    if (!((dieValue == 1 && isSingle(dieValue)) || (dieValue == 5 && isSingle(dieValue))))
+    if (!((dieValue == 1 && isSingle(dieValue)) ||
+          (dieValue == 5 && isSingle(dieValue))))
         return;
 
-    // Variables
     Player* currentPlayer = game.getCurrentPlayer();
     Score& score = currentPlayer->getScore();
 
-    // Force Multiple option if Available
-    if (std::map<uint16_t, uint16_t>& diceSetMap = currentPlayer->getDice().diceSetMap;
-        (game.getValueOfChosenMultiple() == dieValue && canAddMultiples()) || (
-            diceSetMap[dieValue] >= 3 && isMultiple())) {
-        std::cout << "The option to chose multiples has been automatically applied.\n" << std::endl;
+    // If we can or must use the Multiple option automatically
+    if (auto& diceSetMap = currentPlayer->getDice().diceSetMap; (game.getValueOfChosenMultiple() == dieValue && canAddMultiples()) ||
+        (diceSetMap[dieValue] >= 3 && isMultiple()))
+    {
+        std::cout << "Automatically applying Multiple selection.\n";
         checkMultiple(dieValue);
-        // Apply Singles if available
-    } else if (1 <= diceSetMap[dieValue] && diceSetMap[dieValue] < 3) {
+    }
+    else if (diceSetMap[dieValue] > 0 && diceSetMap[dieValue] < 3) {
         score.increaseRoundScore((dieValue == 1) ? 100 : 50);
         diceSetMap[dieValue]--;
         game.manageDiceCount(currentPlayer->getDice().getNumDiceInPlay() - 1);
@@ -250,44 +317,34 @@ void Checker::checkSingle(const uint16_t dieValue) const
     }
 }
 
-void Checker::applyPossibleOptions() const
-{
-    while (isOptionAvailable()) {
-        if (isStrait())
-            checkStraits();
-        if (isSet())
-            checkSet();
-        for (uint16_t dieValue = 1; dieValue <= FULL_SET_OF_DICE; dieValue++)
-            if ((isMultiple() && isDesiredMultipleAvailable(dieValue)) || (
-                (game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200) && (
-                    game.getValueOfChosenMultiple() == dieValue) && canAddMultiples()))
-                checkMultiple(dieValue);
-
-        if (isSingle(1))
-            checkSingle(1);
-        if (isSingle(5))
-            checkSingle(5);
-    }
-}
+/*******************************
+*       HELPER FUNCTIONS       *
+*******************************/
 
 bool Checker::isStrait() const
 {
     std::map<uint16_t, uint16_t>& diceSetMap = game.getCurrentPlayer()->getDice().diceSetMap;
+    if (diceSetMap.size() != FULL_SET_OF_DICE) return false;
+
     uint16_t i = 0;
-    return (diceSetMap.size() == FULL_SET_OF_DICE && std::ranges::all_of(
-        diceSetMap, [&i](const auto& die) {
+    return std::ranges::all_of(
+        diceSetMap,
+        [&i](const auto& die) {
             return die.first == ++i && die.second == 1;
         }
-    ));
+    );
 }
 
 bool Checker::isSet() const
 {
-    return (game.getCurrentPlayer()->getDice().diceSetMap.size() == 3 && !isStrait() && !isMultiple() &&
+    auto& diceSetMap = game.getCurrentPlayer()->getDice().diceSetMap;
+    return diceSetMap.size() == 3 && !isStrait() && !isMultiple() &&
         std::ranges::all_of(
-            game.getCurrentPlayer()->getDice().diceSetMap,
-            [](const auto& die) { return die.second == 2; }
-        ));
+            diceSetMap,
+            [](const auto& die) {
+                return die.second == 2;
+            }
+        );
 }
 
 bool Checker::isMultiple() const
@@ -302,178 +359,30 @@ bool Checker::isDesiredMultipleAvailable(const uint16_t desiredMultiple) const
 
 bool Checker::canAddMultiples() const
 {
-    return (std::ranges::any_of(
-        game.getCurrentPlayer()->getDice().diceSetMap, [this](const auto& die) {
+    return std::ranges::any_of(
+        game.getCurrentPlayer()->getDice().diceSetMap,
+        [this](const auto& die) {
             return die.first == game.getValueOfChosenMultiple();
         }
-    ));
+    );
 }
 
 bool Checker::isSingle(uint16_t single) const
 {
-    return ((single == 1 || single == 5) && std::ranges::any_of(
+    return (single == 1 || single == 5) && std::ranges::any_of(
         game.getCurrentPlayer()->getDice().diceSetMap,
         [single](const auto& die) {
             return die.first == single;
         }
-    ));
+    );
 }
 
 bool Checker::isOptionAvailable() const
 {
-    return (isStrait() || isSet() || isMultiple() || canAddMultiples() || isSingle(1) || isSingle(5));
+    return isStrait() ||
+           isSet() ||
+           isMultiple() ||
+           canAddMultiples() ||
+           isSingle(1) ||
+           isSingle(5);
 }
-
-
-/*******************************
-*   INPUT HANDLING FUNCTIONS   *
-*******************************/
-
-void Checker::readInput(std::istream& input) const
-{
-    Player* currentPlayer = game.getCurrentPlayer();
-    const Score& score = currentPlayer->getScore();
-
-    char ch = '\0';
-    uint16_t val = 0;
-
-    // Keep reading input until we get a meaningful character
-    do input >> ch;
-    while (ch == ' ' || (!strchr("stel123456am0?", ch)));
-
-    switch (ch) {
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6': val = ch - '0'; // Convert char digit to number
-            if (isStrait() || isSet() || (isMultiple() && isDesiredMultipleAvailable(val))
-                || ((score.getScoreFromMultiples() >= 200) && (game.getValueOfChosenMultiple() == val) && (
-                    canAddMultiples()))
-                || isSingle(val))
-                executeSelection(val);
-            else displayImpossibleOptionMessage();
-            break;
-        case 's': executeSecondaryCommand(input);
-            break;
-        case 'a': input >> ch;
-            input.clear();
-            input.ignore(std::numeric_limits<int>::max(), '\n');
-            if (ch == 'l')
-                applyPossibleOptions();
-
-        // No break here, falls through to case 'm' intentionally
-        case 'm': input >> val;
-            if (canProcessMultiple(val))
-                checkMultiple(val);
-            else handleFailedMultiple(val);
-            break;
-        case '0': processZeroCommand();
-            break;
-        case '?': displayPossibleOptions();
-            break;
-        default: displayImpossibleOptionMessage();
-            break;
-    }
-}
-
-// Execute dice selection based on the value
-void Checker::executeSelection(const uint16_t val) const
-{
-    if (isStrait())
-        checkStraits();
-    else if (isSet())
-        checkSet();
-    else if (isMultiple() && isDesiredMultipleAvailable(val))
-        checkMultiple(val);
-    else if (isSingle(val))
-        checkSingle(val);
-}
-
-// Handles 's' command
-void Checker::executeSecondaryCommand(std::istream& input) const
-{
-    char ch;
-    input >> ch;
-    if ((ch == 't' && isStrait()) || (ch == 'e' && isSet()))
-        executeSelection(ch);
-    else if ((ch == '1' && isSingle(1)) || (ch == '5' && isSingle(5)))
-        checkSingle(ch - '0');
-    else displayImpossibleOptionMessage();
-}
-
-// Handles failed 'm' command
-bool Checker::canProcessMultiple(const uint16_t val) const
-{
-    return (isMultiple() && isDesiredMultipleAvailable(val)) || (
-        (game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200) && (
-            game.getValueOfChosenMultiple() == val) && (canAddMultiples()));
-}
-
-void Checker::handleFailedMultiple(const uint16_t chosenMultiple) const
-{
-    std::cout << "You have selected an impossible option" << std::endl;
-
-    if (chosenMultiple) {
-        for (const auto& fst : game.getCurrentPlayer()->getDice().diceSetMap | std::views::keys)
-            if (isDesiredMultipleAvailable(fst))
-                std::cout << "\tMultiples, value: " << fst << std::endl;
-            else if (game.getValueOfChosenMultiple() == fst)
-                std::cout << "Add to Multiple, value: " << fst << std::endl;
-    } else {
-        clear();
-        std::cout << "There is no available multiple" << std::endl;
-    }
-}
-
-// Handles '0' command
-void Checker::processZeroCommand() const
-{
-    Score& score = game.getCurrentPlayer()->getScore();
-    if (game.getSelectedOptionStatus())
-        game.setSelectionContinuationStatus(false);
-    else if ((score.getRoundScore() >= 1000) && isOptionAvailable()) {
-        score.increasePermanentScore(score.getRoundScore());
-        std::cout << "Your official score is now: " << score.getPermanentScore() << std::endl;
-    } else if (!isOptionAvailable()) {
-        clear();
-    } else {
-        clear();
-        std::cout << "You cannot end without a score higher than 1000" << std::endl;
-        pauseAndContinue();
-    }
-}
-
-// Handles '?' command
-void Checker::displayPossibleOptions() const
-{
-    std::cout << "Possible options: " << std::endl;
-    if (isStrait())
-        std::cout << "\tStrait" << std::endl;
-    if (isSet())
-        std::cout << "\tSets" << std::endl;
-    if (isMultiple())
-        for (const auto& fst : game.getCurrentPlayer()->getDice().diceSetMap | std::views::keys)
-            if (isDesiredMultipleAvailable(fst))
-                std::cout << "\tMultiples, value: " << fst << std::endl;
-    if (canAddMultiples())
-        std::cout << "\tAddons, value: " << game.getValueOfChosenMultiple() << std::endl;
-    if (isSingle(1) || isSingle(5))
-        std::cout << "\tSingles" << std::endl;
-    pauseAndContinue();
-}
-
-// Display common impossible option message
-void Checker::displayImpossibleOptionMessage()
-{
-    clear();
-    std::cout << "You have selected an impossible option" << std::endl;
-}
-
-
-/*
-bool dieExists(uin16_t dieValue) {
- return std::any_of(game.getCurrentPlayer()->getDice().diceSetMap.begin(), game.getCurrentPlayer()->getDice().diceSetMap.end(), [dieValue](const auto& die) { return die.first == dieValue; })
-}
-*/
