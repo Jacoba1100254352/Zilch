@@ -1,8 +1,10 @@
 // GameUI.cpp
 
 #include "GameUI.h"
+#include <iostream>
+#include <string>
 #include "GameManager.h"
-#include "PlatformDefinitions.h"
+#include "InputClosed.h"
 
 void displayGameInfo() {
     clear();
@@ -60,10 +62,12 @@ void clear() {
 
 void pauseAndContinue() {
     std::cout << "\nPress enter to continue... " << std::flush;
-    if (strcmp(PLATFORM_NAME, "windows") > 0)
-        system("pause"); // For Windows users
-    else if (strcmp(PLATFORM_NAME, "macos") > 0)
-        system("read"); // For  macOS users
+    if (std::cin.rdbuf()->in_avail() > 0 && std::cin.peek() == '\n')
+        std::cin.get();
+
+    std::string ignoredLine;
+    if (!std::getline(std::cin, ignoredLine))
+        throw InputClosed();
 
     clear();
 }

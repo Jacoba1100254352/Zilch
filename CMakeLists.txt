@@ -17,4 +17,11 @@ add_executable(Zilch
         Score.h
         GameUI.h
         GameUI.cpp
+        InputClosed.h
         PlatformDefinitions.h)
+
+if (MSVC)
+    target_compile_options(Zilch PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(Zilch PRIVATE -Wall -Wextra -Wpedantic)
+endif()

@@ -6,8 +6,8 @@
 #include <random>
 #include <ranges>
 
-
-static void removeZeros(std::map<uint16_t, uint16_t>& diceSetMap)
+namespace {
+void removeZeros(std::map<uint16_t, uint16_t>& diceSetMap)
 {
     for (auto it = diceSetMap.begin(); it != diceSetMap.end();)
         if (it->second == 0)
@@ -15,13 +15,18 @@ static void removeZeros(std::map<uint16_t, uint16_t>& diceSetMap)
         else ++it;
 }
 
-static uint16_t roll()
+std::mt19937& randomEngine()
 {
-    std::random_device rd;
-    std::mt19937 mt(rd());
-    std::uniform_real_distribution<> dist(1, 7);
-    return static_cast<uint16_t>(dist(mt));
+    static thread_local std::mt19937 engine(std::random_device{}());
+    return engine;
 }
+
+uint16_t roll()
+{
+    static thread_local std::uniform_int_distribution<int> dist(1, FULL_SET_OF_DICE);
+    return static_cast<uint16_t>(dist(randomEngine()));
+}
+} // namespace
 
 void Dice::rollDice()
 {
@@ -79,7 +84,7 @@ void Dice::eliminateDice(const uint16_t dieValue)
 
 void Dice::displayDice() const
 {
-    printf("\nYou have %d dice left\n", numDiceInPlay);
+    std::cout << "\nYou have " << numDiceInPlay << " dice left\n";
 
     ///   Build and Print Dice List String   ///
     std::string diceList;

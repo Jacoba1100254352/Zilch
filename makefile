@@ -1,3 +1,5 @@
+.PHONY: all
+
 all:
-	g++ -std=c++23 *.cpp -o zilch
+	c++ -std=c++23 -Wall -Wextra -Wpedantic *.cpp -o zilch
 	./zilch
