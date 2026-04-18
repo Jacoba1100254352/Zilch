@@ -1,21 +1,26 @@
-// Main.cpp
+// main.cpp
+/**
+Author: Jacob Anderson
+Class: ECE-6122-A
+Last Date Modified: 12/2/2025
 
-#include <exception>
-#include <iostream>
+Description:
+    This file contains the main entry point for the game application.
+    It initializes the game manager and user interface, then starts the main UI loop.
+*/
+
 #include "GameManager.h"
-#include "InputClosed.h"
+#include "GameUI.h"
 
-int main() {
-    try {
-        // Create an instance of the ZilchGame class
-        GameManager game;
-        game.playGame();
-        return 0;
-    } catch (const InputClosed&) {
-        std::cout << "\nInput closed. Exiting Zilch." << std::endl;
-        return 0;
-    } catch (const std::exception& error) {
-        std::cerr << "\nFatal error: " << error.what() << std::endl;
-        return 1;
-    }
+int main()
+{
+    // Create game manager and UI instances
+    GameManager game;
+    GameUI ui;
+
+    // Start the main UI loop
+    ui.run(game);
+
+    // Exit the program
+    return 0;
 }

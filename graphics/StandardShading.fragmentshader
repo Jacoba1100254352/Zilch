@@ -1,0 +1,60 @@
+// StandardShading.fragmentshader
+/**
+Author: Jacob Anderson
+Class:  ECE-6122-A
+Date Last Modified: 12/1/2025
+
+Description:
+This fragment shader implements standard Phong shading with ambient, diffuse, and specular components.
+It calculates lighting based on the light position, material properties, and viewer direction.
+*/
+
+#version 120
+
+// Inputs from vertex shader
+varying vec3 Position_worldspace;
+varying vec3 Normal_cameraspace;
+varying vec3 EyeDirection_cameraspace;
+varying vec3 LightDirection_cameraspace;
+
+// Uniforms
+uniform vec3 LightPosition_worldspace;
+uniform float diffuseSpecularScale;
+uniform vec3 materialColor;
+
+// Main function
+void main()
+{
+    // Light emission
+    vec3 LightColor = vec3(1.0, 1.0, 1.0);
+    float LightPower = 50.0;
+
+    // Material colors
+    vec3 MaterialDiffuseColor  = materialColor;
+    vec3 MaterialAmbientColor  = vec3(0.1) * MaterialDiffuseColor;
+    vec3 MaterialSpecularColor = vec3(0.3);
+
+    // Distance to light
+    float distance = length(LightPosition_worldspace - Position_worldspace);
+
+    // Normal vector
+    vec3 n = normalize(Normal_cameraspace);
+    vec3 l = normalize(LightDirection_cameraspace);
+    float cosTheta = clamp(dot(n, l), 0.0, 1.0);
+
+    // Eye vector
+    vec3 E = normalize(EyeDirection_cameraspace);
+    vec3 R = reflect(-l, n);
+    float cosAlpha = clamp(dot(E, R), 0.0, 1.0);
+
+    // Final color calculation
+    vec3 resultColor =
+        MaterialAmbientColor +
+        diffuseSpecularScale * (
+            MaterialDiffuseColor  * LightColor * LightPower * cosTheta / (distance * distance) +
+            MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha, 5.0) / (distance * distance)
+        );
+
+    // Output color
+    gl_FragColor = vec4(resultColor, 1.0);
+}

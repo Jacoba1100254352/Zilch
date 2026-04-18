@@ -1,323 +1,356 @@
 // GameManager.cpp
+/**
+Author: Jacob Anderson
+Class: ECE-6122-A
+Last Date Modified: 12/2/2025
+
+Description:
+This file contains the implementation of the GameManager class, which manages the overall game state, players, turns, and rules.
+*/
 
 #include "GameManager.h"
-#include <limits>
 #include "Checker.h"
+#include "DiceRenderer.h"
 #include "GameUI.h"
-#include "InputClosed.h"
 
-namespace {
-template <typename T>
-bool tryReadValue(T& value)
+#include <algorithm>
+
+/**
+ * @brief Initializes the roll cycle by resetting relevant statuses and scores.
+ */
+void GameManager::initializeRollCycle(const bool resetTurnFlags)
 {
-    if (std::cin >> value)
-        return true;
-
-    if (std::cin.eof())
-        throw InputClosed();
-
-    std::cin.clear();
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    return false;
-}
-} // namespace
-
-
-void GameManager::initializeRollCycle()
-{
-    /***
-     * Initialize each segment of 6-dice re-rolls
-     */
-
+    // Common resets for any roll-cycle start.
     turnContinuationStatus = true;
-    selectedOptionStatus = false; // No option has yet be selected
-    selectionContinuationStatus = true; // Can continue/start selecting // TODO: May need to be set to false
+    bustPending = false;
+    selectionContinuationStatus = true;
 
-    valueOfChosenMultiple = 0;
-
-    // Initialize Score
-    currentPlayer->getScore().setScoreFromMultiples(0);
-}
-
-void GameManager::playGame()
-{
-    displayGameInfo();
-    pauseAndContinue();
-
-    clear();
-
-    // Setup Players
-    enterAndAddPlayers();
-    enterAndSetScoreLimit();
-
-    while (true) {
-        for (currentPlayerIndex = 0; currentPlayerIndex < players.size(); ++currentPlayerIndex) {
-            Player& player = players[currentPlayerIndex];
-            // Check and manage game-end condition
-            if (player.getScore().getPermanentScore() >= player.getScore().getScoreLimit()) {
-                manageLastTurnOpportunity();
-                manageTiedEnding();
-                return;
-            }
-
-            // Play Turn
-            currentPlayer = &player;
-            manageDiceCount(FULL_SET_OF_DICE);
-            while (turnContinuationStatus) {
-                currentPlayer->getDice().rollDice();
-                Checker(*this).check();
-            }
-        }
+    // Only reset roll/selection state when starting a brand-new turn.
+    if (resetTurnFlags) {
+        hasRolledThisTurn = false;
+        selectedOptionStatus = false;
+        valueOfChosenMultiple = 0;
+        if (currentPlayer) currentPlayer->getScore().setScoreFromMultiples(0);
+        bustBonusUsedThisTurn = false;
+        rollCountThisTurn = 0;
     }
 }
 
-void GameManager::manageLastTurnOpportunity()
-{
-    Player* gameEndingPlayer = currentPlayer;
-
-    std::cout << gameEndingPlayer->getName() << " is over " << gameEndingPlayer->getScore().getScoreLimit() << std::endl
-        << "Everyone else has one more chance to win" << std::endl;
-    pauseAndContinue();
-    std::cout << "\n" << std::endl;
-
-    switchToNextPlayer();
-
-    do {
-        std::cout << "It is " << currentPlayer->getName() << "'s last turn" << std::endl;
-        manageDiceCount(FULL_SET_OF_DICE);
-
-        while (turnContinuationStatus) {
-            currentPlayer->getScore().displayHighScoreInfo(
-                currentPlayer->getName(),
-                gameEndingPlayer->getScore().getPermanentScore(),
-                gameEndingPlayer->getName()
-            );
-            currentPlayer->getDice().rollDice();
-            Checker(*this).check();
-        }
-
-        switchToNextPlayer();
-    } while (currentPlayer != gameEndingPlayer);
-}
-
-void GameManager::manageTiedEnding()
-{
-    const Player* playerWithHighestScore = findHighestScoringPlayer();
-    const uint32_t highestScore = playerWithHighestScore->getScore().getPermanentScore();
-    std::vector<Player*> tie;
-
-    for (Player& player : players)
-        if (player.getScore().getPermanentScore() == highestScore)
-            tie.emplace_back(&player);
-
-    if (tie.size() > 1) {
-        for (size_t i = 0; i < tie.size(); ++i) {
-            std::cout << tie[i]->getName();
-            if (i != tie.size() - 1)
-                std::cout << ((i == tie.size() - 2) ? " and " : ", ");
-        }
-        std::cout << " have tied with " << highestScore << " Points!" << std::endl;
-    } else std::cout << playerWithHighestScore->getName() << " won with " << highestScore << " Points!" << std::endl;
-}
-
-/*******************
-*   DICE HELPERS   *
-*******************/
-
+/**
+ * @brief Manages the number of dice in play for the current player.
+ *
+ * @param numOfDice The number of dice to set in play. If zero, sets to full set.
+ */
 void GameManager::manageDiceCount(uint16_t numOfDice)
 {
+    // Ensure there is a current player.
     if (numOfDice == 0)
         numOfDice = FULL_SET_OF_DICE;
 
+    // Update the current player's dice count.
     currentPlayer->getDice().setNumDiceInPlay(numOfDice);
 
+    // If resetting to full set, initialize roll cycle.
     if (numOfDice == FULL_SET_OF_DICE)
-        initializeRollCycle();
+        initializeRollCycle(false);
 }
 
-/*****************************
-*   PLAYER SETUP FUNCTIONS   *
-*****************************/
-
-///   Player Setup   ///
-static uint16_t getNumberOfPlayers()
+/**
+ * @brief Sets the players for the game based on provided names.
+ *
+ * @param playerNames A vector of player names to initialize players.
+ */
+void GameManager::setPlayers(const std::vector<std::string>& playerNames)
 {
-    // Variables
-    uint16_t numPlayers;
+    // Clear existing players and reserve space.
+    players.clear();
+    players.reserve(playerNames.size());
 
-    // Enter and Validate numPlayers
-    while (true) {
-        std::cout << "Enter the number of players (1-6): ";
-        if (!tryReadValue(numPlayers)) {
-            std::cout << "Invalid number of players. Please try again." << std::endl;
-            continue;
-        }
+    // Create players from provided names.
+    for (const auto& name : playerNames)
+        players.emplace_back(name);
 
-        // Exit on correct input
-        if (!std::cin.fail() && 1 <= numPlayers && numPlayers <= 6)
-            break;
-
-        // Re-input
-        std::cout << "Invalid number of players. Please try again." << std::endl;
+    // Set the first player as the current player.
+    if (!players.empty()) {
+        currentPlayer = &players.front();
+        currentIndex = 0;
+        resetFinalRoundState();
     }
-
-    return numPlayers;
 }
 
-void GameManager::enterAndAddPlayers()
+/**
+ * @brief Sets the score limit for all players.
+ *
+ * @param limit The score limit to set.
+ */
+void GameManager::setScoreLimit(const uint32_t limit)
 {
-    const uint16_t numPlayers = getNumberOfPlayers();
-
-    players.clear(); // Clears any previous players
-    players.reserve(numPlayers);
-    for (uint16_t i = 0; i < numPlayers; i++) {
-        std::string playerName;
-        std::cout << "Enter the name of player " << i + 1 << ": ";
-        if (!(std::cin >> playerName)) {
-            if (std::cin.eof())
-                throw InputClosed();
-
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            --i;
-            continue;
-        }
-        addPlayer(playerName);
-    }
-
-    // Initialize currentPlayer to be the first player
-    currentPlayerIndex = 0;
-    currentPlayer = &players.at(0);
-}
-
-void GameManager::addPlayer(const std::string& playerName)
-{
-    players.emplace_back(playerName); // Pass this GameManager instance to the player
-}
-
-///   Player Sequencing   ///
-Player* GameManager::getCurrentPlayer() const
-{
-    return currentPlayer;
-}
-
-void GameManager::switchToNextPlayer()
-{
-    currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
-    currentPlayer = &players[currentPlayerIndex];
-}
-
-///   Score Limit and Highest Score   ///
-void GameManager::enterAndSetScoreLimit()
-{
-    // Variables
-    uint32_t limit;
-
-    // Enter and Validate scoreLimit
-    while (true) {
-        constexpr uint32_t MIN_SCORE_LIMIT = 1000;
-        std::cout << "\nEnter the score limit (minimum " << MIN_SCORE_LIMIT << "): ";
-        if (!tryReadValue(limit)) {
-            std::cout << "Invalid score limit. Please try again." << std::endl;
-            continue;
-        }
-
-        // Exit on correct input
-        if (!std::cin.fail() && limit >= MIN_SCORE_LIMIT)
-            break;
-
-        // Re-input
-        std::cout << "Invalid score limit. Please try again." << std::endl;
-    }
-
-    // Assign scoreLimit per player
     for (Player& player : players)
         player.getScore().setScoreLimit(limit);
 }
 
-const Player* GameManager::findHighestScoringPlayer() const
+/**
+ * @brief Starts a turn for the specified player index.
+ *
+ * @param playerIndex The index of the player to start the turn for.
+ */
+void GameManager::startTurn(const size_t playerIndex)
 {
-    const Player* highestScoringPlayer = currentPlayer;
-    for (const Player& player : players)
+    // Ensure there are players to start a turn.
+    if (players.empty()) return;
+
+    // Set current player based on index.
+    currentIndex = playerIndex % players.size();
+    currentPlayer = &players.at(currentIndex);
+    manageDiceCount(FULL_SET_OF_DICE);
+    initializeRollCycle(true);
+}
+
+/**
+ * @brief Registers that the current player has rolled this turn.
+ */
+void GameManager::registerRoll()
+{
+    hasRolledThisTurn = true;
+    ++rollCountThisTurn;
+}
+
+/**
+ * @brief Resets the saved multiple value and updates the current player's score accordingly.
+ */
+void GameManager::resetSavedMultiple()
+{
+    valueOfChosenMultiple = 0;
+    if (currentPlayer) {
+        currentPlayer->getScore().setScoreFromMultiples(0);
+    }
+}
+
+/**
+ * @brief Starts the final round of the game.
+ */
+void GameManager::startFinalRound()
+{
+    finalRoundActive = true;
+    finalRoundStarterIndex = currentIndex;
+}
+
+/**
+ * @brief Checks if the game will end after the current turn.
+ *
+ * @param playerCount The total number of players in the game.
+ *
+ * @return True if the game will end after the current turn, false otherwise.
+ */
+bool GameManager::willEndAfterCurrentTurn(const std::size_t playerCount) const
+{
+    if (!finalRoundActive || playerCount == 0) return false;
+    const std::size_t nextIndex = (currentIndex + 1) % playerCount;
+    return nextIndex == finalRoundStarterIndex;
+}
+
+/**
+ * @brief Resets the final round state.
+ */
+void GameManager::resetFinalRoundState()
+{
+    finalRoundActive = false;
+    finalRoundStarterIndex = 0;
+}
+
+/**
+ * @brief Ends the current player's turn and banks their score.
+ */
+void GameManager::endTurnAndBank()
+{
+    // Ensure there is a current player.
+    if (!canBankCurrentScore())
+        return;
+
+    // Bank the current player's round score.
+    bustPending = false;
+    Score& score = currentPlayer->getScore();
+    score.increasePermanentScore(score.getRoundScore());
+    score.setRoundScore(0);
+    currentPlayer->getDice().setNumDiceInPlay(0);
+    turnContinuationStatus = false;
+    selectionContinuationStatus = false;
+}
+
+/**
+ * @brief Checks whether the current player can bank the points accumulated this turn.
+ *
+ * @return True if the current turn state satisfies the bank requirements.
+ */
+bool GameManager::canBankCurrentScore() const
+{
+    if (!currentPlayer || bustPending || !hasRolledThisTurn || !selectedOptionStatus)
+        return false;
+
+    const Score& score = currentPlayer->getScore();
+    if (score.getRoundScore() == 0)
+        return false;
+
+    return score.getPermanentScore() + score.getRoundScore() >= ruleConfig.getBankThreshold();
+}
+
+/**
+ * @brief Switches to the next player in the turn order.
+ */
+void GameManager::switchToNextPlayer()
+{
+    // Advance to the next player in a circular manner.
+    if (players.empty())
+        return;
+
+    // Move to the next player index.
+    currentIndex = (currentIndex + 1) % players.size();
+    currentPlayer = &players[currentIndex];
+}
+
+/**
+ * @brief Finds the player with the highest permanent score.
+ *
+ * @return Pointer to the highest scoring player.
+ */
+Player* GameManager::findHighestScoringPlayer()
+{
+    if (players.empty())
+        return nullptr;
+
+    // Scan for the player with the greatest permanent score.
+    Player* highestScoringPlayer = &players.front();
+    for (Player& player : players)
         if (player.getScore().getPermanentScore() > highestScoringPlayer->getScore().getPermanentScore())
             highestScoringPlayer = &player;
+
+    // Return pointer to the highest scoring player.
     return highestScoringPlayer;
 }
 
-/****************************
-*   GET AND SET FUNCTIONS   *
-****************************/
+/**
+ * @brief Retrieves the player with the highest permanent score.
+ *
+ * @return Pointer to the winning player, or nullptr if no players exist.
+ */
+Player* GameManager::getWinner() const
+{
+    // Return nullptr if there are no players.
+    if (players.empty())
+        return nullptr;
 
-///   Chosen Multiple   ///
+    // Find the player with the maximum permanent score.
+    const auto iter = std::ranges::max_element(
+        players,
+        [](const Player& a, const Player& b)->bool {
+            return a.getScore().getPermanentScore() < b.getScore().getPermanentScore();
+        }
+    );
+
+    // Return pointer to the winning player.
+    return iter == players.end() ? nullptr : const_cast<Player*>(&*iter);
+}
+
+/**
+ * @brief Gets the value of the chosen multiple for scoring.
+ *
+ * @return The value of the chosen multiple.
+ */
 uint16_t GameManager::getValueOfChosenMultiple() const
 {
     return valueOfChosenMultiple;
 }
 
+/**
+ * @brief Sets the value of the chosen multiple for scoring.
+ *
+ * @param chosenMultipleValue The value to set for the chosen multiple.
+ */
 void GameManager::setValueOfChosenMultiple(const uint16_t chosenMultipleValue)
 {
     valueOfChosenMultiple = chosenMultipleValue;
 }
 
-///   Option Status   ///
+/**
+ * @brief Gets the status of whether an option has been selected.
+ *
+ * @return True if an option has been selected, false otherwise.
+ */
 bool GameManager::getSelectedOptionStatus() const
 {
     return selectedOptionStatus;
 }
 
+/**
+ * @brief Sets the status of whether an option has been selected.
+ *
+ * @param isOptionSelected True if an option has been selected, false otherwise.
+ */
 void GameManager::setSelectedOptionStatus(const bool isOptionSelected)
 {
     selectedOptionStatus = isOptionSelected;
 }
 
-///   Turn Continuation Status   ///
+/**
+ * @brief Gets the status of whether the turn should continue.
+ *
+ * @return True if the turn should continue, false otherwise.
+ */
 bool GameManager::getTurnContinuationStatus() const
 {
     return turnContinuationStatus;
 }
 
-void GameManager::setTurnContinuationStatus(bool continueTurn, const bool isBust)
+/**
+ * @brief Sets the status of whether the turn should continue.
+ *
+ * @param continueTurn True if the turn should continue, false otherwise.
+ * @param isBust True if the player has busted, false otherwise.
+ */
+void GameManager::setTurnContinuationStatus(const bool continueTurn, const bool isBust)
 {
-    // If continueTurn is true or this was a bust, carry the requested state through unchanged.
-    if (continueTurn || isBust) {
+    // Handle bust scenario.
+    if (isBust) {
         turnContinuationStatus = continueTurn;
+        bustPending = true;
         return;
     }
 
-    // We opted to stop: Now, we know that both continueTurn and isBust are false.
+    // Clear bust status and bank score if threshold met.
+    bustPending = false;
 
-    // Greater than or equal to 1000: log and end turn
-    if (Score& score = currentPlayer->getScore();
-        selectedOptionStatus && (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000)) {
-        if (score.getRoundScore() > 0) {
-            score.increasePermanentScore(score.getRoundScore());
-            score.setRoundScore(0); // Reset Round Score
-            std::cout << std::endl << currentPlayer->getName() << "'s permanent score has been logged and is now: " << score.getPermanentScore() << std::endl << std::endl;
-        }
-        currentPlayer->getDice().setNumDiceInPlay(0);
-        // else if: No option selected and not above 1000: select an option
-    } else if (!selectedOptionStatus) {
-        std::cout << "You are not allowed to end without a permanent or running score higher than 1000" << std::endl;
-        continueTurn = true;
-        //pauseAndContinue();
-        //printInstructions(game, REENTER);
-    }
-
-    // Set the turn continuation status
+    // Set turn continuation status.
     turnContinuationStatus = continueTurn;
 }
 
-///   Selection Status   ///
+/**
+ * @brief Gets the status of whether selection should continue.
+ *
+ * @return True if selection should continue, false otherwise.
+ */
 bool GameManager::getSelectionContinuationStatus() const
 {
     return selectionContinuationStatus;
 }
 
+/**
+ * @brief Sets the status of whether selection should continue.
+ *
+ * @param continueSelecting True if selection should continue, false otherwise.
+ */
 void GameManager::setSelectionContinuationStatus(bool continueSelecting)
 {
-    if (!continueSelecting && !selectedOptionStatus) {
-        std::cout << "You must select at least one option" << std::endl;
+    if (!continueSelecting && !selectedOptionStatus)
         continueSelecting = true;
-    }
     selectionContinuationStatus = continueSelecting;
+}
+
+/**
+ * @brief Retrieves the current player.
+ *
+ * @return Pointer to the current player.
+ */
+Player* GameManager::getCurrentPlayer() const
+{
+    return currentPlayer;
 }

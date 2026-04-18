@@ -1,6 +1,7 @@
 cmake-build-debug
 cmake-build-debug-coverage
 build/
+output/
 .DS_Store
 .idea
 zilch

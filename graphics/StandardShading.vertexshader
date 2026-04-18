@@ -1,0 +1,52 @@
+// StandardShading.vertexshader
+/**
+Author: Jacob Anderson
+Class:  ECE-6122-A
+Date Last Modified: 12/1/2025
+
+Description:
+This vertex shader transforms vertex positions and normals from model space to world space and camera space.
+It outputs the necessary data for lighting calculations in the fragment shader.
+*/
+
+#version 120
+
+// Outputs to fragment shader
+varying vec3 Position_worldspace;
+varying vec3 Normal_cameraspace;
+varying vec3 EyeDirection_cameraspace;
+varying vec3 LightDirection_cameraspace;
+
+// Uniforms
+uniform mat4 MVP;
+uniform mat4 V;
+uniform mat4 M;
+uniform vec3 LightPosition_worldspace;
+
+// Main function
+void main()
+{
+    // SFML (OpenGL 2.1 path) feeds vertex position as gl_Vertex
+    vec3 vertexPosition_modelspace = gl_Vertex.xyz;
+
+    // Normals are encoded in the vertex color as [0,1] -> [-1,1]
+    vec3 normal_encoded = gl_Color.rgb;
+    vec3 vertexNormal_modelspace = normalize(normal_encoded * 2.0 - 1.0);
+
+    // Position in clip space
+    gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);
+
+    // Position in world space
+    Position_worldspace = (M * vec4(vertexPosition_modelspace, 1.0)).xyz;
+
+    // Position in camera space
+    vec3 vertexPosition_cameraspace = (V * M * vec4(vertexPosition_modelspace, 1.0)).xyz;
+    EyeDirection_cameraspace = -vertexPosition_cameraspace;
+
+    // Light in camera space
+    vec3 LightPosition_cameraspace = (V * vec4(LightPosition_worldspace, 1.0)).xyz;
+    LightDirection_cameraspace = LightPosition_cameraspace + EyeDirection_cameraspace;
+
+    // Normal in camera space
+    Normal_cameraspace = (V * M * vec4(vertexNormal_modelspace, 0.0)).xyz;
+}

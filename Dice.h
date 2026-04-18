@@ -1,35 +1,54 @@
 // Dice.h
+/**
+Author: Jacob Anderson
+Class: ECE-6122-A
+Last Date Modified: 12/1/2025
+
+Description:
+Header for `Dice` class that manages dice rolls, counts, eliminations, and detection of multiples.
+*/
 
 #ifndef ZILCH_DICE_H
 #define ZILCH_DICE_H
 
-#include <cstdint>
 #include <map>
+#include <vector>
 
 inline constexpr uint16_t FULL_SET_OF_DICE = 6;
 
+/**
+ * @class Dice Dice.h "Dice.h"
+ *
+ * @brief Manages dice rolls, counts, eliminations, and detection of multiples.
+ */
 class Dice {
 public:
-    Dice() : numDiceInPlay(FULL_SET_OF_DICE), multipleExists(false) {} // Constructor initializes the member variable
+	// Constructor initializes with full set of dice.
+	Dice() : numDiceInPlay(FULL_SET_OF_DICE), multipleExists(false) {}
 
-    std::map<uint16_t, uint16_t> diceSetMap;
+	// Map of die value to count.
+	std::map<uint16_t, uint16_t> diceSetMap;
+	[[nodiscard]] const std::vector<uint16_t>& getLastRoll() const { return lastRoll; }
 
-    void rollDice();
+	// Rolls the dice and updates the dice set map and last roll values.
+	void rollDice();
 
-    [[nodiscard]] uint16_t getNumDiceInPlay() const;
-    void setNumDiceInPlay(uint16_t numOfDice);
+	// Gets the number of dice currently in play.
+	[[nodiscard]] uint16_t getNumDiceInPlay() const;
+	void setNumDiceInPlay(uint16_t numOfDice);
 
-    [[maybe_unused]] void recountNumDiceInPlay();
-    void eliminateDice(uint16_t dieValue);
+	// Recounts the number of dice in play based on the dice set map.
+	[[maybe_unused]] void recountNumDiceInPlay();
+	void eliminateDice(uint16_t dieValue);
 
-    void calculateMultipleAvailability();
-    [[nodiscard]] bool isMultipleAvailable() const;
-
-    void displayDice() const;
+	// Calculates if any multiples (three or more of a kind) are available in the current dice set.
+	void calculateMultipleAvailability();
+	[[nodiscard]] bool isMultipleAvailable() const;
 
 private:
-    uint16_t numDiceInPlay;
-    bool multipleExists;
+	uint16_t numDiceInPlay;
+	bool multipleExists;
+	std::vector<uint16_t> lastRoll;
 };
 
 #endif //ZILCH_DICE_H
