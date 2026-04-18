@@ -1,58 +1,64 @@
 // Checker.h
+/**
+Author: Jacob Anderson
+Class: ECE-6122-A
+Last Date Modified: 12/1/2025
+
+Description:
+Header file for the Checker class, which provides methods to check available scoring options
+based on the current state of the game managed by GameManager.
+*/
 
 #ifndef ZILCH_CHECKER_H
 #define ZILCH_CHECKER_H
 
-#include <cstdint>
-#include <iostream>
+#include <functional>
+#include <string>
+#include <vector>
 
+/**
+ * @class GameManager GameManager.h "GameManager"
+ */
 class GameManager;
 
+/**
+ * @class Checker Checker.h "Checker.h"
+ *
+ * @brief Provides methods to check available scoring options based on the current game state.
+ */
 class Checker {
 public:
-    explicit Checker(GameManager& game) : game(game) {} // Constructor initializes the member variable
+	// Represents a scoring option with a label and associated action.
+	struct Option {
+		std::string label;
+		std::function<void()> action;
+	};
 
-    void handleFirstRollBust() const;
+	// Constructor that takes a reference to the GameManager.
+	explicit Checker(GameManager& game) : game(game) {}
 
-    void handleBust() const;
+	// Retrieves a list of available scoring options.
+	[[nodiscard]] std::vector<Option> getAvailableOptions() const;
+	void handleBusts() const;
 
-    [[nodiscard]] std::vector<uint16_t> displayMenuOptions() const;
-
-    static void ignoreRemainingInput();
-
-    void check() const;
-
-    void checkUserInput() const;
-
-    void checkStraits() const;
-
-    void checkSet() const;
-
-    void checkMultiple(uint16_t dieValue) const;
-
-    void checkSingle(uint16_t dieValue) const;
-
-    [[nodiscard]] bool isStrait() const;
-
-    [[nodiscard]] bool isSet() const;
-
-    [[nodiscard]] bool isMultiple() const;
-
-    [[nodiscard]] bool isDesiredMultipleAvailable(uint16_t desiredMultiple) const;
-
-    [[nodiscard]] bool canAddMultiples() const;
-
-    [[nodiscard]] bool isSingle(uint16_t single) const;
-
-    // OptionAvailability
-    [[nodiscard]] bool isOptionAvailable() const;
+	// Individual option checks.
+	[[nodiscard]] bool isStrait() const;
+	[[nodiscard]] bool isSet() const;
+	[[nodiscard]] bool isMultiple() const;
+	[[nodiscard]] bool isDesiredMultipleAvailable(uint16_t desiredMultiple) const;
+	[[nodiscard]] bool canAddMultiples() const;
+	[[nodiscard]] bool isSingle(uint16_t single) const;
+	[[nodiscard]] bool isOptionAvailable() const;
 
 private:
-    GameManager& game; // Member variable holding a reference to the GameManager instance
+	// Reference to the GameManager instance.
+	GameManager& game;
 
-    // Input Functions
-    static void displayImpossibleOptionMessage();
+	// Option application methods.
+	void applyStrait() const;
+	void applySet() const;
+	void applyMultiple(uint16_t dieValue) const;
+	void applySingle(uint16_t dieValue) const;
 };
-
 
 #endif //ZILCH_CHECKER_H
