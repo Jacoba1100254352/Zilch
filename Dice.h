@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <map>
 
-#define FULL_SET_OF_DICE 6
+inline constexpr uint16_t FULL_SET_OF_DICE = 6;
 
 class Dice {
 public:

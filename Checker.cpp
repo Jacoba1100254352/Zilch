@@ -3,12 +3,14 @@
 #include "Checker.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <ranges>
 #include "Dice.h"
 #include "GameManager.h"
 #include "GameUI.h"
+#include "InputClosed.h"
 
 /********************
 *   CHECK HELPERS   *
@@ -50,26 +52,25 @@ void Checker::printPossibleMultipleAddition() const
 void Checker::ignoreRemainingInput()
 {
     std::cin.clear();
-    std::cin.ignore(std::numeric_limits<int>::max(), '\n');
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-bool Checker::enterEndTurnOption(uint16_t &playOrEndTurn) const
+uint16_t Checker::enterEndTurnOption() const
 {
-
-    // Enter Decision
-    std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
-    std::cin >> playOrEndTurn;
-
-    // Handle incorrect input
-    while (std::cin.fail() || playOrEndTurn < 0 || 2 < playOrEndTurn) {
-        clear();
+    int playOrEndTurn = -1;
+    while (true) {
         std::cout << "Type 2 to end turn, 1 to continue selecting or 0 to roll again: ";
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<int>::max(), '\n');
-        std::cin >> playOrEndTurn;
-    }
+        if (std::cin >> playOrEndTurn) {
+            if (0 <= playOrEndTurn && playOrEndTurn <= 2)
+                return static_cast<uint16_t>(playOrEndTurn);
+        } else if (std::cin.eof()) {
+            throw InputClosed();
+        }
 
-    return (playOrEndTurn == 2) && (game.getCurrentPlayer()->getScore().getRoundScore() >= 1000);
+        clear();
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
 }
 
 void Checker::updateGameStatus(const uint16_t playOrEndTurn) const
@@ -137,16 +138,20 @@ void Checker::checkUserInput() const
 
         // Process scoring and end of turn options.
         if (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000) {
-            score.displayHighScoreInfo(currentPlayer->getName(), game.findHighestScoringPlayer()->getName());
+            const Player* highestScoringPlayer = game.findHighestScoringPlayer();
+            score.displayHighScoreInfo(
+                currentPlayer->getName(),
+                highestScoringPlayer->getScore().getPermanentScore(),
+                highestScoringPlayer->getName()
+            );
 
             // Handle end turn decision.
-            if (uint16_t playOrEndTurn = 0; enterEndTurnOption(playOrEndTurn)) {
-                // Since enterEndTurnOption() returned true, the user chose to end the turn.
-                if (playOrEndTurn == 2 && (score.getPermanentScore() >= 1000 || score.getRoundScore() >= 1000))
-                    applyPossibleOptions();
-                updateGameStatus(playOrEndTurn);
-                clear(); // Clear screen.
-            }
+            const uint16_t playOrEndTurn = enterEndTurnOption();
+            if (playOrEndTurn == 2)
+                applyPossibleOptions();
+
+            updateGameStatus(playOrEndTurn);
+            clear(); // Clear screen.
 
             // Handle scenario where no options are left.
         } else if (!isOptionAvailable())
@@ -297,7 +302,11 @@ bool Checker::isMultiple() const
 
 bool Checker::isDesiredMultipleAvailable(const uint16_t desiredMultiple) const
 {
-    return game.getCurrentPlayer()->getDice().diceSetMap[desiredMultiple] >= 3;
+    const auto& diceSetMap = game.getCurrentPlayer()->getDice().diceSetMap;
+    if (const auto it = diceSetMap.find(desiredMultiple); it != diceSetMap.end())
+        return it->second >= 3;
+
+    return false;
 }
 
 bool Checker::canAddMultiples() const
@@ -336,10 +345,20 @@ void Checker::readInput(std::istream& input) const
 
     char ch = '\0';
     uint16_t val = 0;
+    constexpr const char* VALID_INPUTS = "stel123456am0?";
 
     // Keep reading input until we get a meaningful character
-    do input >> ch;
-    while (ch == ' ' || (!strchr("stel123456am0?", ch)));
+    while (true) {
+        if (input >> ch) {
+            if (ch != ' ' && std::strchr(VALID_INPUTS, ch) != nullptr)
+                break;
+        } else if (input.eof()) {
+            throw InputClosed();
+        } else {
+            input.clear();
+            input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    }
 
     switch (ch) {
         case '1':
@@ -347,7 +366,7 @@ void Checker::readInput(std::istream& input) const
         case '3':
         case '4':
         case '5':
-        case '6': val = ch - '0'; // Convert char digit to number
+        case '6': val = static_cast<uint16_t>(ch - '0'); // Convert char digit to number
             if (isStrait() || isSet() || (isMultiple() && isDesiredMultipleAvailable(val))
                 || ((score.getScoreFromMultiples() >= 200) && (game.getValueOfChosenMultiple() == val) && (
                     canAddMultiples()))
@@ -357,14 +376,33 @@ void Checker::readInput(std::istream& input) const
             break;
         case 's': executeSecondaryCommand(input);
             break;
-        case 'a': input >> ch;
+        case 'a':
+            if (!(input >> ch)) {
+                if (input.eof())
+                    throw InputClosed();
+
+                input.clear();
+                input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                displayImpossibleOptionMessage();
+                break;
+            }
             input.clear();
-            input.ignore(std::numeric_limits<int>::max(), '\n');
+            input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             if (ch == 'l')
                 applyPossibleOptions();
+            else
+                displayImpossibleOptionMessage();
+            break;
+        case 'm':
+            if (!(input >> val)) {
+                if (input.eof())
+                    throw InputClosed();
 
-        // No break here, falls through to case 'm' intentionally
-        case 'm': input >> val;
+                input.clear();
+                input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                displayImpossibleOptionMessage();
+                break;
+            }
             if (canProcessMultiple(val))
                 checkMultiple(val);
             else handleFailedMultiple(val);
@@ -394,12 +432,21 @@ void Checker::executeSelection(const uint16_t val) const
 // Handles 's' command
 void Checker::executeSecondaryCommand(std::istream& input) const
 {
-    char ch;
-    input >> ch;
+    char ch = '\0';
+    if (!(input >> ch)) {
+        if (input.eof())
+            throw InputClosed();
+
+        input.clear();
+        input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        displayImpossibleOptionMessage();
+        return;
+    }
+
     if ((ch == 't' && isStrait()) || (ch == 'e' && isSet()))
-        executeSelection(ch);
+        (ch == 't') ? checkStraits() : checkSet();
     else if ((ch == '1' && isSingle(1)) || (ch == '5' && isSingle(5)))
-        checkSingle(ch - '0');
+        checkSingle(static_cast<uint16_t>(ch - '0'));
     else displayImpossibleOptionMessage();
 }
 
@@ -430,17 +477,11 @@ void Checker::handleFailedMultiple(const uint16_t chosenMultiple) const
 // Handles '0' command
 void Checker::processZeroCommand() const
 {
-    Score& score = game.getCurrentPlayer()->getScore();
     if (game.getSelectedOptionStatus())
         game.setSelectionContinuationStatus(false);
-    else if ((score.getRoundScore() >= 1000) && isOptionAvailable()) {
-        score.increasePermanentScore(score.getRoundScore());
-        std::cout << "Your official score is now: " << score.getPermanentScore() << std::endl;
-    } else if (!isOptionAvailable()) {
+    else {
         clear();
-    } else {
-        clear();
-        std::cout << "You cannot end without a score higher than 1000" << std::endl;
+        std::cout << "You must select a scoring option before rolling again or ending your turn" << std::endl;
         pauseAndContinue();
     }
 }

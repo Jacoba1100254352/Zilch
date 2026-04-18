@@ -15,8 +15,10 @@ public:
 
     // No "sets" are included for these as the names don't change and everything else is pass by reference and defined in the constructor
     [[nodiscard]] Dice& getDice() { return dice; }
+    [[nodiscard]] const Dice& getDice() const { return dice; }
     [[nodiscard]] Score& getScore() { return score; }
-    [[nodiscard]] std::string getName() const { return name; }
+    [[nodiscard]] const Score& getScore() const { return score; }
+    [[nodiscard]] const std::string& getName() const { return name; }
 
 private:
     Dice dice;

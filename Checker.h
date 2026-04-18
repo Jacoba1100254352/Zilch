@@ -20,7 +20,7 @@ public:
 
     static void ignoreRemainingInput();
 
-    [[nodiscard]] bool enterEndTurnOption(uint16_t &playOrEndTurn) const;
+    [[nodiscard]] uint16_t enterEndTurnOption() const;
 
     void updateGameStatus(uint16_t playOrEndTurn) const;
 

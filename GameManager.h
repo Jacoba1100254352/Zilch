@@ -3,12 +3,13 @@
 #ifndef ZILCH_GAME_MANAGER_H
 #define ZILCH_GAME_MANAGER_H
 
+#include <cstddef>
 #include <vector>
 #include "Player.h"
 
 class GameManager {
 public:
-    GameManager() : players({}), currentPlayer(nullptr), valueOfChosenMultiple(0), selectedOptionStatus(false), turnContinuationStatus(true), selectionContinuationStatus(true) {}
+    GameManager() : players({}), currentPlayerIndex(0), currentPlayer(nullptr), valueOfChosenMultiple(0), selectedOptionStatus(false), turnContinuationStatus(true), selectionContinuationStatus(true) {}
 
     /************************
     *   ENUM FOR PRINTING   *
@@ -25,7 +26,7 @@ public:
 
     void manageDiceCount(uint16_t numOfDice);
 
-    [[nodiscard]] Player* findHighestScoringPlayer();
+    [[nodiscard]] const Player* findHighestScoringPlayer() const;
     void switchToNextPlayer();
 
     /**************************
@@ -53,6 +54,7 @@ public:
 
 private:
     std::vector<Player> players;
+    std::size_t currentPlayerIndex;
     Player* currentPlayer;
     uint16_t valueOfChosenMultiple;
     bool selectedOptionStatus;
