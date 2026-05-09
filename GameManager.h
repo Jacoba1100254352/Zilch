@@ -1,4 +1,12 @@
 // GameManager.h
+/**
+Author: Jacob Anderson
+Class: ECE-6122-A
+Last Date Modified: 12/2/2025
+
+Description:
+ Header for GameManager class that manages game state, players, turns, and rules.
+*/
 
 #ifndef GAMEMANAGER_H
 #define GAMEMANAGER_H
@@ -9,73 +17,99 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "ZilchStates.h"
+#include "GameStateMachine.h"
+#include "Player.h"
+#include "RuleConfig.h"
 
-// Forward declarations
-class Player;
-
-// A small Score struct for illustration (simpler than your original).
-struct Score {
-    uint32_t limit    = 2000;
-    uint32_t perm     = 0;  // permanent (overall) score
-    uint32_t round    = 0;  // score during the turn
-    uint32_t multiple = 0;  // track multiple scoring in progress
-};
-
-// A small Dice class for illustration.
-class Dice {
-public:
-    Dice() : numDiceInPlay(6) {}
-    void rollDice();
-    void displayDice() const;
-    [[nodiscard]] uint16_t getNumDiceInPlay() const { return numDiceInPlay; }
-    void setNumDiceInPlay(const uint16_t nd) { numDiceInPlay = nd; }
-    void clear() { diceSetMap.clear(); }
-    // etc.
-
-    std::map<uint16_t, uint16_t> diceSetMap;
-
-private:
-    uint16_t numDiceInPlay;
-};
-
-// For demonstration, a trivial Player class
-class Player {
-public:
-    explicit Player(std::string  n) : name(std::move(n)) {}
-    Score score;
-    Dice dice;
-    std::string name;
-};
-
+/**
+ * @class GameManager GameManager.h "GameManager"
+ *
+ * @brief Manages the overall game state, players, turns, and rules.
+ */
 class GameManager {
 public:
-    GameManager();
+	// Constructor initializes member variables.
+	GameManager() : players({}), currentPlayer(nullptr), currentIndex(0), valueOfChosenMultiple(0), selectedOptionStatus(false),
+					turnContinuationStatus(true), selectionContinuationStatus(true) {}
 
-    void run();  // Main function that runs the game using the state machine.
+	// Roll Cycle Management
+	void initializeRollCycle(bool resetTurnFlags);
+	void manageDiceCount(uint16_t numOfDice);
+
+	// RuleConfig
+	[[nodiscard]] const RuleConfig& getRuleConfig() const { return ruleConfig; }
+	[[nodiscard]] RuleConfig& accessRuleConfig() { return ruleConfig; }
+	[[nodiscard]] GameStateMachine& getStateMachine() { return stateMachine; }
+	[[nodiscard]] const GameStateMachine& getStateMachine() const { return stateMachine; }
+
+	// Players
+	void setPlayers(const std::vector<std::string>& playerNames);
+	[[nodiscard]] const std::vector<Player>& getPlayers() const { return players; }
+	[[nodiscard]] std::vector<Player>& accessPlayers() { return players; }
+
+	// Score Limit
+	void setScoreLimit(uint32_t limit);
+
+	// Turn Management
+	void startTurn(size_t playerIndex);
+	void endTurnAndBank();
+	[[nodiscard]] bool canBankCurrentScore() const;
+	void switchToNextPlayer();
+	[[nodiscard]] Player* findHighestScoringPlayer();
+	[[nodiscard]] Player* getWinner() const;
+
+	// SelectedOptionStatus
+	[[nodiscard]] bool getSelectedOptionStatus() const;
+	void setSelectedOptionStatus(bool isOptionSelected);
+
+	// TurnContinuationStatus
+	[[nodiscard]] bool getTurnContinuationStatus() const;
+	[[nodiscard]] bool getBustPending() const { return bustPending; }
+	void clearBustPending() { bustPending = false; }
+	void setTurnContinuationStatus(bool continueTurn, bool isBust = false);
+	[[nodiscard]] uint32_t getRollCountThisTurn() const { return rollCountThisTurn; }
+	void registerRoll();
+	[[nodiscard]] bool getBustBonusUsedThisTurn() const { return bustBonusUsedThisTurn; }
+	void setBustBonusUsedThisTurn(const bool used) { bustBonusUsedThisTurn = used; }
+	void resetSavedMultiple();
+	[[nodiscard]] bool isFinalRoundActive() const { return finalRoundActive; }
+	[[nodiscard]] size_t getFinalRoundStarterIndex() const { return finalRoundStarterIndex; }
+	void startFinalRound();
+	[[nodiscard]] bool willEndAfterCurrentTurn(std::size_t playerCount) const;
+	void resetFinalRoundState();
+
+	// Roll state
+	[[nodiscard]] bool getHasRolledThisTurn() const { return hasRolledThisTurn; }
+	void setHasRolledThisTurn(const bool rolled) { hasRolledThisTurn = rolled; }
+
+	// SelectionContinuationStatus
+	[[nodiscard]] bool getSelectionContinuationStatus() const;
+	void setSelectionContinuationStatus(bool continueSelecting);
+
+	// CurrentPlayer
+	[[nodiscard]] Player* getCurrentPlayer() const;
+	[[nodiscard]] size_t getCurrentIndex() const { return currentIndex; }
+
+	// ValueOfChosenMultiple
+	[[nodiscard]] uint16_t getValueOfChosenMultiple() const;
+	void setValueOfChosenMultiple(uint16_t chosenMultipleValue);
 
 private:
-    ZilchGameState currentState;
-
-    // Basic game data
-    std::vector<Player> players;
-    int currentPlayerIndex;
-
-    // === Setup and general flow methods
-    void doSetupState();
-    void doBeginTurn();
-    void doRollDice();
-    void doCheckOptions();
-    void doSelectOption();
-    void doApplyScore();
-    void doEndTurn();
-    void doCheckGameEnd();
-    void doLastTurn();
-
-    // Utility
-    [[nodiscard]] bool isGameOver() const;
-    Player& getCurrentPlayer();
-    void switchToNextPlayer();
+	std::vector<Player> players;
+	Player* currentPlayer;
+	size_t currentIndex;
+	uint16_t valueOfChosenMultiple;
+	bool selectedOptionStatus;
+	bool turnContinuationStatus;
+	bool selectionContinuationStatus;
+	bool bustPending{false};
+	bool hasRolledThisTurn{false};
+	bool bustBonusUsedThisTurn{false};
+	uint32_t rollCountThisTurn{0};
+	bool finalRoundActive{false};
+	size_t finalRoundStarterIndex{0};
+	RuleConfig ruleConfig;
+	GameStateMachine stateMachine;
 };
 
 #endif // GAMEMANAGER_H

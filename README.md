@@ -1,7 +1,15 @@
 # Zilch
-This is a game that I have been writing for a while, it should be done! Find a problem? Please let me know! :)
+This branch is the SFML/OpenGL visual interface version of Zilch.
 
-For best result, I recommend running this from the terminal using the `make` command.
+The audited CLI version is preserved on the `zilch-cli` branch.
 
-Also note: In the game, in addition to the options listed, you can also enter the numbers `1`, `2`, `3`, `4`, `5`, or `6`, or the word `all` to select an option.
-With these, priority is given to the highest scoring options available.
+Prerequisites on macOS:
+- `brew install sfml@2 libomp`
+
+Build and run:
+- `cmake -S . -B build`
+- `cmake --build build`
+- `./build/Zilch`
+
+Or use:
+- `make`
