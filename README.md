@@ -17,3 +17,5 @@ Or use:
 Run tests:
 - `ctest --test-dir build --output-on-failure`
 - `make test`
+
+The `ZilchRulesTests` target covers core dice invariants, scoring combinations, rule toggles, bust handling, banking gates, final-round and winner state, state-machine descriptions, and resource path resolution.

@@ -19,6 +19,7 @@ std::string GameStateMachine::describe() const
 {
 	switch (current) {
 		case State::Intro: return "Intro";
+		case State::Rules: return "Rules";
 		case State::Setup: return "Setup";
 		case State::PlayerTurn: return "PlayerTurn";
 		case State::Rolling: return "Rolling";

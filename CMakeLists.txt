@@ -68,6 +68,7 @@ if(BUILD_TESTING)
             Dice.cpp
             Checker.cpp
             GameManager.cpp
+            ResourcePath.cpp
             GameStateMachine.cpp)
 
     target_include_directories(ZilchRulesTests PRIVATE ${PROJECT_SOURCE_DIR})
