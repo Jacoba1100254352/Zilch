@@ -1,4 +1,4 @@
-.PHONY: all build run
+.PHONY: all build run test
 
 all: build run
 
@@ -8,3 +8,6 @@ build:
 
 run:
 	./build/Zilch
+
+test: build
+	ctest --test-dir build --output-on-failure

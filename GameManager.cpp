@@ -9,9 +9,6 @@ This file contains the implementation of the GameManager class, which manages th
 */
 
 #include "GameManager.h"
-#include "Checker.h"
-#include "DiceRenderer.h"
-#include "GameUI.h"
 
 #include <algorithm>
 
@@ -44,6 +41,9 @@ void GameManager::initializeRollCycle(const bool resetTurnFlags)
 void GameManager::manageDiceCount(uint16_t numOfDice)
 {
     // Ensure there is a current player.
+    if (!currentPlayer)
+        return;
+
     if (numOfDice == 0)
         numOfDice = FULL_SET_OF_DICE;
 
@@ -71,10 +71,21 @@ void GameManager::setPlayers(const std::vector<std::string>& playerNames)
         players.emplace_back(name);
 
     // Set the first player as the current player.
+    resetFinalRoundState();
     if (!players.empty()) {
         currentPlayer = &players.front();
         currentIndex = 0;
-        resetFinalRoundState();
+    } else {
+        currentPlayer = nullptr;
+        currentIndex = 0;
+        valueOfChosenMultiple = 0;
+        selectedOptionStatus = false;
+        turnContinuationStatus = false;
+        selectionContinuationStatus = false;
+        bustPending = false;
+        hasRolledThisTurn = false;
+        bustBonusUsedThisTurn = false;
+        rollCountThisTurn = 0;
     }
 }
 
@@ -133,6 +144,18 @@ void GameManager::startFinalRound()
 {
     finalRoundActive = true;
     finalRoundStarterIndex = currentIndex;
+    finalRoundLeaderIndex = currentIndex;
+}
+
+void GameManager::updateFinalRoundLeaderForCurrentPlayer()
+{
+    if (!finalRoundActive || players.empty() || currentIndex >= players.size() || finalRoundLeaderIndex >= players.size())
+        return;
+
+    const uint32_t currentScore = players[currentIndex].getScore().getPermanentScore();
+    const uint32_t leaderScore = players[finalRoundLeaderIndex].getScore().getPermanentScore();
+    if (currentScore > leaderScore)
+        finalRoundLeaderIndex = currentIndex;
 }
 
 /**
@@ -156,6 +179,7 @@ void GameManager::resetFinalRoundState()
 {
     finalRoundActive = false;
     finalRoundStarterIndex = 0;
+    finalRoundLeaderIndex = 0;
 }
 
 /**
@@ -233,7 +257,7 @@ Player* GameManager::findHighestScoringPlayer()
  *
  * @return Pointer to the winning player, or nullptr if no players exist.
  */
-Player* GameManager::getWinner() const
+const Player* GameManager::getWinner() const
 {
     // Return nullptr if there are no players.
     if (players.empty())
@@ -248,7 +272,7 @@ Player* GameManager::getWinner() const
     );
 
     // Return pointer to the winning player.
-    return iter == players.end() ? nullptr : const_cast<Player*>(&*iter);
+    return iter == players.end() ? nullptr : &*iter;
 }
 
 /**

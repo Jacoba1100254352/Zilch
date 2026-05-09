@@ -16,6 +16,7 @@ various game screens such as the intro, setup, player turns, and game over.
 #include "DiceRenderer.h"
 #include "GameManager.h"
 #include "Player.h"
+#include "ResourcePath.h"
 #include "RuleConfig.h"
 
 #include <stdexcept>
@@ -190,7 +191,7 @@ GameUI::GameUI()
     window.setVerticalSyncEnabled(true);
 
     // Load UI font
-    if (!uiFont.loadFromFile("fonts/FreeSans.ttf"))
+    if (!uiFont.loadFromFile(resolveResourcePath("fonts/FreeSans.ttf")))
         throw std::runtime_error("Failed to load UI font from fonts/FreeSans.ttf");
 }
 
@@ -648,14 +649,6 @@ void GameUI::renderSetup(
                     commitBankThreshold();
                 }
             }
-        } else if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Enter) {
-            // Support Enter to add a new player when editing the last name.
-            if (const bool editingNames = (focusedNameIndex >= 0) && !editingScoreLimit && !editingBankThreshold; editingNames && focusedNameIndex == static_cast<int>(playerNames.size() - 1) && playerNames.size() < 6) {
-                const std::string newName = "Player " + std::to_string(playerNames.size() + 1);
-                playerNames.push_back(newName);
-                focusedNameIndex = static_cast<int>(playerNames.size() - 1);
-                nameEditBuffer = newName;
-            }
         } else if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left) {
             // Get mouse position
             const float mx = static_cast<float>(e.mouseButton.x);
@@ -891,6 +884,7 @@ void GameUI::renderTurn(
                 if (!game.isFinalRoundActive() && newTotal >= scoreLimit) {
                     game.startFinalRound();
                 }
+                game.updateFinalRoundLeaderForCurrentPlayer();
 
                 advanceToNextOrEnd();
             } else {
@@ -1184,6 +1178,8 @@ void GameUI::renderGameOver(const GameManager& game, const std::vector<sf::Event
                 names += winners[i];
             }
             titleText = "Winners (tie): " + names;
+        } else if (winners.size() > 1 && game.isFinalRoundActive() && game.getFinalRoundLeaderIndex() < players.size()) {
+            titleText = "Winner: " + players[game.getFinalRoundLeaderIndex()].getName();
         } else {
             titleText = "Winner: " + winners.front();
         }

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(Zilch)
+include(CTest)
 
 if(POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
@@ -30,6 +31,7 @@ add_executable(Zilch
         GameManager.cpp
         GameUI.cpp
         DiceRenderer.cpp
+        ResourcePath.cpp
         GameStateMachine.cpp
         common/objloader.cpp)
 
@@ -58,4 +60,23 @@ if(MSVC)
     target_compile_options(Zilch PRIVATE /W4 /permissive-)
 else()
     target_compile_options(Zilch PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(ZilchRulesTests
+            tests/test_game_rules.cpp
+            Dice.cpp
+            Checker.cpp
+            GameManager.cpp
+            GameStateMachine.cpp)
+
+    target_include_directories(ZilchRulesTests PRIVATE ${PROJECT_SOURCE_DIR})
+
+    if(MSVC)
+        target_compile_options(ZilchRulesTests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(ZilchRulesTests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME ZilchRulesTests COMMAND ZilchRulesTests)
 endif()

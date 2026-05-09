@@ -11,6 +11,7 @@ and rendering animated dice rolls with lighting effects.
 */
 
 #include "DiceRenderer.h"
+#include "ResourcePath.h"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,7 @@ namespace {
 	constexpr float DISPLAY_SCALE = 50.f;
 	constexpr float ANIMATION_DURATION = 2.5f;
 	constexpr float AMBIENT_TERM = 0.25f;
-	constexpr float PIP_MIN_FACING_COS = 1.0f;	// 0.12f
+	constexpr float PIP_MIN_FACING_COS = 0.12f;
 	constexpr float SETTLE_TIME = 2.0f;
 	constexpr float SPIN_RATE = 4.2f;
 	constexpr float SPIN_PHASE_PER_DIE = 0.25f;
@@ -148,9 +149,10 @@ void DiceRenderer::ensureResourcesLoaded() const {
 	std::vector<unsigned int> allIndices;
 	std::vector<unsigned int> matIDs;
 	std::vector<std::string> matNames;
+	const std::string diceModelPath = resolveResourcePath("graphics/dice.obj");
 
 	if (!loadOBJWithMaterials(
-			"graphics/dice.obj",
+			diceModelPath.c_str(),
 			vertices,
 			normals,
 			allIndices,

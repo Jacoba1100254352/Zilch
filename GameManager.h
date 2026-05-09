@@ -51,7 +51,7 @@ public:
 	[[nodiscard]] bool canBankCurrentScore() const;
 	void switchToNextPlayer();
 	[[nodiscard]] Player* findHighestScoringPlayer();
-	[[nodiscard]] Player* getWinner() const;
+	[[nodiscard]] const Player* getWinner() const;
 
 	// SelectedOptionStatus
 	[[nodiscard]] bool getSelectedOptionStatus() const;
@@ -69,7 +69,9 @@ public:
 	void resetSavedMultiple();
 	[[nodiscard]] bool isFinalRoundActive() const { return finalRoundActive; }
 	[[nodiscard]] size_t getFinalRoundStarterIndex() const { return finalRoundStarterIndex; }
+	[[nodiscard]] size_t getFinalRoundLeaderIndex() const { return finalRoundLeaderIndex; }
 	void startFinalRound();
+	void updateFinalRoundLeaderForCurrentPlayer();
 	[[nodiscard]] bool willEndAfterCurrentTurn(std::size_t playerCount) const;
 	void resetFinalRoundState();
 
@@ -103,6 +105,7 @@ private:
 	uint32_t rollCountThisTurn{0};
 	bool finalRoundActive{false};
 	size_t finalRoundStarterIndex{0};
+	size_t finalRoundLeaderIndex{0};
 	RuleConfig ruleConfig;
 	GameStateMachine stateMachine;
 };

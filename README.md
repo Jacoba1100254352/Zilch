@@ -13,3 +13,7 @@ Build and run:
 
 Or use:
 - `make`
+
+Run tests:
+- `ctest --test-dir build --output-on-failure`
+- `make test`

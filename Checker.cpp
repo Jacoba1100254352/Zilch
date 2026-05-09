@@ -54,7 +54,8 @@ std::vector<Checker::Option> Checker::getAvailableOptions() const
     // Add multiple-based scoring options.
     for (uint16_t dieValue = 1; dieValue <= FULL_SET_OF_DICE; ++dieValue) {
         if ((isMultiple() && isDesiredMultipleAvailable(dieValue)) ||
-            ((game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200) &&
+            (game.getRuleConfig().multiplesEnabled() &&
+                (game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200) &&
                 (game.getValueOfChosenMultiple() == dieValue) && canAddMultiples())) {
             options.push_back({"Score multiples of " + std::to_string(dieValue), [this, dieValue]() { applyMultiple(dieValue); }});
         }
@@ -171,6 +172,9 @@ bool Checker::isDesiredMultipleAvailable(const uint16_t desiredMultiple) const
  */
 bool Checker::canAddMultiples() const
 {
+    if (!game.getRuleConfig().multiplesEnabled())
+        return false;
+
     const auto& diceMap = game.getCurrentPlayer()->getDice().diceSetMap;
     if (const auto it = diceMap.find(game.getValueOfChosenMultiple()); it != diceMap.end())
         return it->second > 0;
@@ -187,12 +191,22 @@ bool Checker::isSingle(uint16_t single) const
 {
     if (!game.getRuleConfig().singlesEnabled())
         return false;
-    return ((single == 1 || single == 5) && std::ranges::any_of(
-        game.getCurrentPlayer()->getDice().diceSetMap,
-        [single](const auto& die) {
-            return die.first == single;
-        }
-    ));
+    if (single != 1 && single != 5)
+        return false;
+
+    const Dice& dice = game.getCurrentPlayer()->getDice();
+    const auto it = dice.diceSetMap.find(single);
+    if (it == dice.diceSetMap.end() || it->second == 0)
+        return false;
+
+    if (game.getRuleConfig().multiplesEnabled()) {
+        if (game.getValueOfChosenMultiple() == single && game.getCurrentPlayer()->getScore().getScoreFromMultiples() >= 200)
+            return false;
+        if (dice.isMultipleAvailable() && it->second >= 3)
+            return false;
+    }
+
+    return true;
 }
 
 /**
@@ -264,16 +278,19 @@ void Checker::applyMultiple(const uint16_t dieValue) const
 void Checker::applySingle(const uint16_t dieValue) const
 {
     Player* currentPlayer = game.getCurrentPlayer();
-    Score& score = currentPlayer->getScore();
+    if (!currentPlayer || !isSingle(dieValue))
+        return;
 
-    // Decide whether to treat the single as part of an existing multiple or a standalone score.
-    if (std::map<uint16_t, uint16_t>& diceSetMap = currentPlayer->getDice().diceSetMap; (game.getValueOfChosenMultiple() == dieValue && canAddMultiples()) ||
-        (diceSetMap[dieValue] >= 3 && isMultiple())) {
-        applyMultiple(dieValue);
-    } else if (1 <= diceSetMap[dieValue] && diceSetMap[dieValue] < 3) {
-        score.increaseRoundScore((dieValue == 1) ? 100 : 50);
-        diceSetMap[dieValue]--;
-        game.manageDiceCount(currentPlayer->getDice().getNumDiceInPlay() - 1);
-        game.setSelectedOptionStatus(true);
-    }
+    Dice& dice = currentPlayer->getDice();
+    Score& score = currentPlayer->getScore();
+    auto it = dice.diceSetMap.find(dieValue);
+    if (it == dice.diceSetMap.end() || it->second == 0)
+        return;
+
+    score.increaseRoundScore((dieValue == 1) ? 100 : 50);
+    --it->second;
+    const uint16_t remainingDice = dice.getNumDiceInPlay() > 0 ? static_cast<uint16_t>(dice.getNumDiceInPlay() - 1) : 0;
+    game.manageDiceCount(remainingDice);
+    dice.calculateMultipleAvailability();
+    game.setSelectedOptionStatus(true);
 }
