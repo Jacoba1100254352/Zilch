@@ -76,11 +76,18 @@ std::vector<Checker::Option> Checker::getAvailableOptions() const
 void Checker::handleBusts() const
 {
     Player* player = game.getCurrentPlayer();
+    if (!player)
+        return;
+
     const Dice& dice = player->getDice();
     Score& score = player->getScore();
 
+    if (dice.getNumDiceInPlay() >= 1 && isOptionAvailable())
+        return;
+
     // Optional first-roll bust bonus: award 50 points and restart dice if enabled and unused.
     if (game.getRuleConfig().firstRollBustBonusEnabled() &&
+        dice.getNumDiceInPlay() >= 1 &&
         game.getRollCountThisTurn() == 1 &&
         !game.getBustBonusUsedThisTurn()) {
         score.increaseRoundScore(50);
@@ -93,11 +100,7 @@ void Checker::handleBusts() const
     }
 
     // Handle bust logic based on remaining dice and current round score.
-    if (game.getRuleConfig().firstRollBustBonusEnabled() &&
-        dice.getNumDiceInPlay() == FULL_SET_OF_DICE && !score.getRoundScore()) {
-        score.increaseRoundScore(50);
-        game.setTurnContinuationStatus(true, true);
-    } else if (dice.getNumDiceInPlay() >= 1) {
+    if (dice.getNumDiceInPlay() >= 1) {
         score.setRoundScore(0);
         game.setTurnContinuationStatus(false, true);
     } else {

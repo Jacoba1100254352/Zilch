@@ -360,6 +360,23 @@ void disabledBustBonusBustsImmediately()
     expect(!game.getTurnContinuationStatus(), "regular bust should stop the turn");
 }
 
+void nonBustHandsDoNotTriggerBustHandling()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B"});
+    setDice(game, {{1, 1}, {2, 1}, {3, 1}, {4, 1}, {6, 2}});
+    game.registerRoll();
+
+    const Checker checker(game);
+    expect(checker.isOptionAvailable(), "test hand should have a scoring option");
+    checker.handleBusts();
+
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(0), "non-bust hand should not receive a bust bonus");
+    expect(!game.getBustBonusUsedThisTurn(), "non-bust hand should not consume the bust bonus");
+    expect(!game.getBustPending(), "non-bust hand should not mark a bust");
+    expect(game.getTurnContinuationStatus(), "non-bust hand should keep the turn active");
+}
+
 void emptyDiceAfterScoringResetsToHotDice()
 {
     GameManager game;
@@ -591,6 +608,7 @@ int main()
     runTest("ruleTogglesSuppressOnlyTheirConfiguredOptions", ruleTogglesSuppressOnlyTheirConfiguredOptions);
     runTest("firstRollBustBonusIsOneTimeAndRestartsRoll", firstRollBustBonusIsOneTimeAndRestartsRoll);
     runTest("disabledBustBonusBustsImmediately", disabledBustBonusBustsImmediately);
+    runTest("nonBustHandsDoNotTriggerBustHandling", nonBustHandsDoNotTriggerBustHandling);
     runTest("emptyDiceAfterScoringResetsToHotDice", emptyDiceAfterScoringResetsToHotDice);
     runTest("bankingRequiresRollSelectionScoreAndThreshold", bankingRequiresRollSelectionScoreAndThreshold);
     runTest("endTurnAndBankMovesRoundScoreOnlyWhenAllowed", endTurnAndBankMovesRoundScoreOnlyWhenAllowed);
