@@ -5,6 +5,7 @@
 #include "Player.h"
 #include "ResourcePath.h"
 #include "Score.h"
+#include "rules/RuleManager.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -275,6 +276,38 @@ void fourOnesDoubleBaseMultipleAndHotDice()
     expectEqual(score.getScoreFromMultiples(), static_cast<uint16_t>(2000), "saved multiple should retain the scaled one score");
     expectEqual(dice.getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "scoring every die should reset to hot dice");
     expect(dice.diceSetMap.empty(), "all ones should be consumed");
+}
+
+void ruleManagerExposesStructuredGameOptions()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B"});
+    setDice(game, {{2, 3}, {5, 1}});
+
+    zilch::rules::RuleManager ruleManager(game.getRuleConfig());
+    const std::vector<zilch::rules::GameOption> options = ruleManager.evaluate(game);
+
+    zilch::rules::GameOption multipleOption{};
+    bool found = false;
+    for (const zilch::rules::GameOption& option : options) {
+        if (option.ruleType == zilch::rules::RuleType::Multiple && option.selectedValue == 2) {
+            multipleOption = option;
+            found = true;
+            break;
+        }
+    }
+
+    expect(found, "rule manager should expose a structured multiple option");
+    expectEqual(multipleOption.label, std::string("Score multiples of 2"), "structured option should preserve UI label");
+    expectEqual(multipleOption.pointsAwarded, static_cast<uint32_t>(200), "structured option should expose awarded points");
+    expectEqual(multipleOption.accumulatedMultipleScore, static_cast<uint32_t>(200), "structured option should expose saved multiple total");
+    expectEqual(multipleOption.consumedDice.at(2), static_cast<uint16_t>(3), "structured option should expose consumed dice");
+
+    ruleManager.apply(game, multipleOption);
+
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(200), "rule manager should apply score through structured option");
+    expectEqual(game.getValueOfChosenMultiple(), static_cast<uint16_t>(2), "rule manager should update saved multiple value");
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), static_cast<uint16_t>(1), "rule manager should consume scored dice");
 }
 
 void ruleTogglesSuppressOnlyTheirConfiguredOptions()
@@ -605,6 +638,7 @@ int main()
     runTest("straightsAndSetsScoreHotDice", straightsAndSetsScoreHotDice);
     runTest("multiplesScoreScaleAndCanBeExtended", multiplesScoreScaleAndCanBeExtended);
     runTest("fourOnesDoubleBaseMultipleAndHotDice", fourOnesDoubleBaseMultipleAndHotDice);
+    runTest("ruleManagerExposesStructuredGameOptions", ruleManagerExposesStructuredGameOptions);
     runTest("ruleTogglesSuppressOnlyTheirConfiguredOptions", ruleTogglesSuppressOnlyTheirConfiguredOptions);
     runTest("firstRollBustBonusIsOneTimeAndRestartsRoll", firstRollBustBonusIsOneTimeAndRestartsRoll);
     runTest("disabledBustBonusBustsImmediately", disabledBustBonusBustsImmediately);

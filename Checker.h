@@ -53,12 +53,6 @@ public:
 private:
 	// Reference to the GameManager instance.
 	GameManager& game;
-
-	// Option application methods.
-	void applyStrait() const;
-	void applySet() const;
-	void applyMultiple(uint16_t dieValue) const;
-	void applySingle(uint16_t dieValue) const;
 };
 
 #endif //ZILCH_CHECKER_H

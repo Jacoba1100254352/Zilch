@@ -3,6 +3,10 @@ This branch is the SFML/OpenGL visual interface version of Zilch.
 
 The audited CLI version is preserved on the `zilch-cli` branch.
 
+The `dev/architecture/zilch-basic-structure` branch keeps the SFML surface but
+pulls the rule/option layer toward the Java `Zilch Basic` structure: `Checker`
+is now an adapter over `RuleManager`, `IRule`, `RuleContext`, and `GameOption`.
+
 Prerequisites on macOS:
 - `brew install sfml@2 libomp`
 
@@ -90,6 +94,35 @@ classDiagram
         +getAvailableOptions()
         +handleBusts()
     }
+    class RuleManager {
+        -vector~IRule~ rules
+        +evaluate()
+        +apply()
+        +hasOption()
+    }
+    class IRule {
+        +type()
+        +evaluate()
+    }
+    class RuleContext {
+        +game
+        +player
+        +dice
+        +score
+        +config
+    }
+    class GameOption {
+        +ruleType
+        +label
+        +selectedValue
+        +pointsAwarded
+        +consumedDice
+    }
+    class StraitRule
+    class SetRule
+    class MultipleRule
+    class AddMultipleRule
+    class SingleRule
     class Player {
         -Dice dice
         -Score score
@@ -126,9 +159,20 @@ classDiagram
     GameManager "1" *-- "1..6" Player : players
     Player *-- Dice
     Player *-- Score
-    Checker --> GameManager : evaluates current turn
-    Checker ..> Dice : reads dice map
-    Checker ..> Score : applies scoring
+    Checker --> GameManager : current turn adapter
+    Checker --> RuleManager : evaluates/applies options
+    RuleManager --> RuleContext : builds
+    RuleManager --> GameOption : returns/applies
+    RuleManager *-- IRule
+    IRule <|.. StraitRule
+    IRule <|.. SetRule
+    IRule <|.. MultipleRule
+    IRule <|.. AddMultipleRule
+    IRule <|.. SingleRule
+    RuleContext --> GameManager
+    RuleContext --> Player
+    RuleContext --> Dice
+    RuleContext --> Score
     DiceRenderer ..> ResourcePath : loads model
     DiceRenderer ..> ObjLoader : loads dice.obj
 ```
@@ -142,4 +186,4 @@ Run tests:
 - `ctest --test-dir build --output-on-failure`
 - `make test`
 
-The `ZilchRulesTests` target covers core dice invariants, scoring combinations, rule toggles, bust handling, banking gates, final-round and winner state, state-machine descriptions, and resource path resolution.
+The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking gates, final-round and winner state, state-machine descriptions, and resource path resolution.

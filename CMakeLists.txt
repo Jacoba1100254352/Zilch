@@ -28,6 +28,7 @@ add_executable(Zilch
         main.cpp
         Dice.cpp
         Checker.cpp
+        rules/RuleManager.cpp
         GameManager.cpp
         GameUI.cpp
         DiceRenderer.cpp
@@ -67,6 +68,7 @@ if(BUILD_TESTING)
             tests/test_game_rules.cpp
             Dice.cpp
             Checker.cpp
+            rules/RuleManager.cpp
             GameManager.cpp
             ResourcePath.cpp
             GameStateMachine.cpp)
