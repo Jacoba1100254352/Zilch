@@ -44,8 +44,11 @@ void GameManager::manageDiceCount(uint16_t numOfDice)
     if (!currentPlayer)
         return;
 
-    if (numOfDice == 0)
+    if (numOfDice == 0) {
+        // Scoring every available die produces hot dice and ends any steal chain.
+        endStealChain();
         numOfDice = FULL_SET_OF_DICE;
+    }
 
     // Update the current player's dice count.
     currentPlayer->getDice().setNumDiceInPlay(numOfDice);
@@ -62,6 +65,8 @@ void GameManager::manageDiceCount(uint16_t numOfDice)
  */
 void GameManager::setPlayers(const std::vector<std::string>& playerNames)
 {
+    endStealChain();
+
     // Clear existing players and reserve space.
     players.clear();
     players.reserve(playerNames.size());
@@ -113,6 +118,15 @@ void GameManager::startTurn(const size_t playerIndex)
     // Set current player based on index.
     currentIndex = playerIndex % players.size();
     currentPlayer = &players.at(currentIndex);
+
+    // A steal offer belongs only to the immediately following player.
+    if (!ruleConfig.stealingEnabled() || !stealOffer || stealOffer->recipientIndex != currentIndex)
+        stealOffer.reset();
+    stealContinuationActive = false;
+
+    currentPlayer->getScore().setRoundScore(0);
+    currentPlayer->getDice().diceSetMap.clear();
+    currentPlayer->getDice().calculateMultipleAvailability();
     manageDiceCount(FULL_SET_OF_DICE);
     initializeRollCycle(true);
 }
@@ -191,10 +205,27 @@ void GameManager::endTurnAndBank()
     if (!canBankCurrentScore())
         return;
 
-    // Bank the current player's round score.
+    // Capture a stealable continuation before clearing the completed turn.
     bustPending = false;
     Score& score = currentPlayer->getScore();
-    score.increasePermanentScore(score.getRoundScore());
+    const uint32_t bankedRoundScore = score.getRoundScore();
+    const uint16_t unrolledDice = currentPlayer->getDice().getNumDiceInPlay();
+
+    stealOffer.reset();
+    if (ruleConfig.stealingEnabled() && players.size() > 1 &&
+        unrolledDice > 0 && unrolledDice < FULL_SET_OF_DICE) {
+        stealOffer = StealOffer{
+            (currentIndex + 1) % players.size(),
+            unrolledDice,
+            bankedRoundScore,
+            valueOfChosenMultiple,
+            score.getScoreFromMultiples()
+        };
+    }
+    stealContinuationActive = false;
+
+    // Bank the current player's round score normally; stealing copies it.
+    score.increasePermanentScore(bankedRoundScore);
     score.setRoundScore(0);
     currentPlayer->getDice().setNumDiceInPlay(0);
     turnContinuationStatus = false;
@@ -216,6 +247,99 @@ bool GameManager::canBankCurrentScore() const
         return false;
 
     return score.getPermanentScore() + score.getRoundScore() >= ruleConfig.getBankThreshold();
+}
+
+/**
+ * @brief Checks whether the current player has the immediately preceding player's steal offer.
+ */
+bool GameManager::hasStealOfferForCurrentPlayer() const
+{
+    return currentPlayer && stealOffer && stealOffer->recipientIndex == currentIndex;
+}
+
+/**
+ * @brief Checks whether the current player may accept a steal offer.
+ *
+ * A player must already be on the board at the configured bank threshold. This
+ * prevents inherited points from being used to reach the player's first bank.
+ */
+bool GameManager::canCurrentPlayerSteal() const
+{
+    return ruleConfig.stealingEnabled() && hasStealOfferForCurrentPlayer() &&
+           currentPlayer->getScore().getPermanentScore() >= ruleConfig.getBankThreshold();
+}
+
+uint16_t GameManager::getStealOfferDiceCount() const
+{
+    return hasStealOfferForCurrentPlayer() ? stealOffer->diceCount : 0;
+}
+
+uint32_t GameManager::getStealOfferScore() const
+{
+    return hasStealOfferForCurrentPlayer() ? stealOffer->roundScore : 0;
+}
+
+/**
+ * @brief Accepts the current steal offer and restores its continuation state.
+ */
+bool GameManager::acceptStealOffer()
+{
+    if (!canCurrentPlayerSteal())
+        return false;
+
+    const StealOffer accepted = *stealOffer;
+    stealOffer.reset();
+
+    Score& score = currentPlayer->getScore();
+    score.setRoundScore(accepted.roundScore);
+    score.setScoreFromMultiples(accepted.savedMultipleScore);
+    valueOfChosenMultiple = accepted.savedMultipleValue;
+
+    Dice& dice = currentPlayer->getDice();
+    dice.diceSetMap.clear();
+    dice.setNumDiceInPlay(accepted.diceCount);
+    dice.calculateMultipleAvailability();
+
+    turnContinuationStatus = true;
+    selectionContinuationStatus = true;
+    selectedOptionStatus = false;
+    bustPending = false;
+    hasRolledThisTurn = false;
+    bustBonusUsedThisTurn = false;
+    rollCountThisTurn = 0;
+    stealContinuationActive = true;
+    return true;
+}
+
+/**
+ * @brief Declines the current steal offer and prepares a fresh six-die turn.
+ */
+void GameManager::declineStealOffer()
+{
+    if (!hasStealOfferForCurrentPlayer())
+        return;
+
+    stealOffer.reset();
+    stealContinuationActive = false;
+
+    Score& score = currentPlayer->getScore();
+    score.setRoundScore(0);
+    resetSavedMultiple();
+
+    Dice& dice = currentPlayer->getDice();
+    dice.diceSetMap.clear();
+    dice.calculateMultipleAvailability();
+    dice.setNumDiceInPlay(FULL_SET_OF_DICE);
+    initializeRollCycle(true);
+}
+
+/**
+ * @brief Ends both an active steal continuation and any unaccepted offer.
+ */
+void GameManager::endStealChain()
+{
+    stealOffer.reset();
+    stealContinuationActive = false;
 }
 
 /**

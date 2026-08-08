@@ -478,6 +478,160 @@ void endTurnAndBankMovesRoundScoreOnlyWhenAllowed()
     expectEqual(blocked.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(999), "blocked bank should not clear round score");
 }
 
+void disabledStealingNeverCreatesOffer()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B"});
+    game.getCurrentPlayer()->getScore().increasePermanentScore(1000);
+    game.getCurrentPlayer()->getScore().increaseRoundScore(100);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(!game.hasStealOfferForCurrentPlayer(), "disabled stealing should never create an offer");
+}
+
+void stealingCopiesBankedContinuationAndChains()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B", "C"});
+    game.accessRuleConfig().setStealingEnabled(true);
+    for (Player& player : game.accessPlayers())
+        player.getScore().increasePermanentScore(1000);
+
+    Score& firstScore = game.getCurrentPlayer()->getScore();
+    firstScore.increaseRoundScore(350);
+    firstScore.setScoreFromMultiples(200);
+    game.setValueOfChosenMultiple(2);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(3);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+
+    expectEqual(firstScore.getPermanentScore(), static_cast<uint32_t>(1350), "the first player should bank normally before offering a steal");
+
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(game.hasStealOfferForCurrentPlayer(), "the immediately following player should receive the steal offer");
+    expect(game.canCurrentPlayerSteal(), "a player already on the board should be allowed to steal");
+    expectEqual(game.getStealOfferDiceCount(), static_cast<uint16_t>(3), "the steal offer should preserve the unrolled dice count");
+    expectEqual(game.getStealOfferScore(), static_cast<uint32_t>(350), "the steal offer should copy the prior turn score");
+    expect(game.acceptStealOffer(), "an eligible player should be able to accept the steal offer");
+
+    Score& secondScore = game.getCurrentPlayer()->getScore();
+    expectEqual(secondScore.getRoundScore(), static_cast<uint32_t>(350), "accepting should copy the offered score into the new round");
+    expectEqual(secondScore.getScoreFromMultiples(), static_cast<uint32_t>(200), "accepting should preserve an extendable multiple score");
+    expectEqual(game.getValueOfChosenMultiple(), static_cast<uint16_t>(2), "accepting should preserve the saved multiple value");
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), static_cast<uint16_t>(3), "accepting should use only the offered dice");
+    expect(game.isStealContinuationActive(), "accepting should mark the turn as a steal continuation");
+
+    secondScore.increaseRoundScore(100);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(2);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+    expectEqual(secondScore.getPermanentScore(), static_cast<uint32_t>(1450), "the second player should bank inherited and newly scored points");
+
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(game.canCurrentPlayerSteal(), "a valid steal should chain to another on-board player");
+    expectEqual(game.getStealOfferDiceCount(), static_cast<uint16_t>(2), "a chained steal should preserve the latest unrolled dice count");
+    expectEqual(game.getStealOfferScore(), static_cast<uint32_t>(450), "a chained steal should carry the full continued score");
+    expect(game.acceptStealOffer(), "the third player should be able to continue the chain");
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(450), "the chained score should become the third player's round score");
+}
+
+void stealingCannotPutPlayerOnBoardAndCanBeDeclined()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B"});
+    game.accessRuleConfig().setBankThreshold(750);
+    game.accessRuleConfig().setStealingEnabled(true);
+    game.accessPlayers()[0].getScore().increasePermanentScore(750);
+
+    Score& score = game.getCurrentPlayer()->getScore();
+    score.increaseRoundScore(250);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(game.hasStealOfferForCurrentPlayer(), "an off-board player should still be shown the preceding offer context");
+    expect(!game.canCurrentPlayerSteal(), "a steal must not help a player reach the configured first-bank threshold");
+    expect(!game.acceptStealOffer(), "an ineligible player must not be able to accept a steal");
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(0), "a rejected steal must not copy points");
+
+    game.declineStealOffer();
+    expect(!game.hasStealOfferForCurrentPlayer(), "starting fresh should clear the steal offer");
+    expect(!game.isStealContinuationActive(), "starting fresh should leave no active steal chain");
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "starting fresh should restore all six dice");
+    expectEqual(game.getValueOfChosenMultiple(), static_cast<uint16_t>(0), "starting fresh should clear inherited combination state");
+}
+
+void stealingBustEndsChainWithoutFirstRollBonus()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B"});
+    game.accessRuleConfig().setStealingEnabled(true);
+    game.accessPlayers()[0].getScore().increasePermanentScore(1000);
+    game.accessPlayers()[1].getScore().increasePermanentScore(1000);
+
+    game.getCurrentPlayer()->getScore().increaseRoundScore(300);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(3);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(game.acceptStealOffer(), "the second player should accept the prepared steal");
+
+    setDice(game, {{2, 1}, {3, 1}, {4, 1}});
+    game.registerRoll();
+    const Checker checker(game);
+    expect(!checker.isOptionAvailable(), "the stolen three-die hand should be a bust");
+    checker.handleBusts();
+
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(0), "a steal bust should lose the inherited score");
+    expect(game.getBustPending(), "a steal bust should require pass acknowledgment");
+    expect(!game.getBustBonusUsedThisTurn(), "the first-roll bust bonus must not rescue a steal chain");
+    expect(!game.isStealContinuationActive(), "a bust should end the steal chain");
+}
+
+void hotDiceEndsStealChainAndCannotBeOffered()
+{
+    GameManager game;
+    prepareTurn(game, {"A", "B", "C"});
+    game.accessRuleConfig().setStealingEnabled(true);
+    for (Player& player : game.accessPlayers())
+        player.getScore().increasePermanentScore(1000);
+
+    game.getCurrentPlayer()->getScore().increaseRoundScore(300);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(3);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(game.acceptStealOffer(), "the second player should accept the prepared steal");
+
+    setDice(game, {{1, 3}});
+    game.registerRoll();
+    const Checker checker(game);
+    runOption(checker.getAvailableOptions(), "Score multiples of 1");
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "scoring every stolen die should produce hot dice");
+    expect(!game.isStealContinuationActive(), "using every unrolled die should end the steal chain");
+
+    game.endTurnAndBank();
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
+    expect(!game.hasStealOfferForCurrentPlayer(), "banking with hot dice should not create another steal offer");
+}
+
 void finalRoundRequiresBeatingLeaderWhenTiesDisabled()
 {
     GameManager game;
@@ -548,6 +702,8 @@ void selectionAndSavedMultipleStateResetCorrectly()
 void ruleConfigTogglesAndThresholdsAreStable()
 {
     RuleConfig config;
+    expect(!config.stealingEnabled(), "stealing should be disabled by default");
+
     config.toggleStraits();
     config.toggleSets();
     config.toggleMultiples();
@@ -556,6 +712,7 @@ void ruleConfigTogglesAndThresholdsAreStable()
     config.toggleFirstRollBustBonus();
     config.toggleFinalChase();
     config.toggleAllowTies();
+    config.toggleStealing();
     expect(!config.straitsEnabled(), "straits toggle should disable straights");
     expect(!config.setsEnabled(), "sets toggle should disable sets");
     expect(!config.multiplesEnabled(), "multiples toggle should disable multiples");
@@ -564,6 +721,7 @@ void ruleConfigTogglesAndThresholdsAreStable()
     expect(!config.firstRollBustBonusEnabled(), "first-roll bust toggle should disable the bonus");
     expect(!config.finalChaseEnabled(), "final chase toggle should disable final chase");
     expect(config.tiesAllowed(), "allow ties toggle should enable ties");
+    expect(config.stealingEnabled(), "stealing toggle should enable the optional variant");
 
     config.setStraitsEnabled(true);
     config.setSetsEnabled(true);
@@ -572,6 +730,7 @@ void ruleConfigTogglesAndThresholdsAreStable()
     config.setFirstRollBustBonusEnabled(true);
     config.setFinalChaseEnabled(true);
     config.setAllowTies(false);
+    config.setStealingEnabled(false);
     expect(config.straitsEnabled(), "straits setter should enable straights");
     expect(config.setsEnabled(), "sets setter should enable sets");
     expect(config.multiplesEnabled(), "multiples setter should enable multiples");
@@ -579,6 +738,7 @@ void ruleConfigTogglesAndThresholdsAreStable()
     expect(config.firstRollBustBonusEnabled(), "first-roll bust setter should enable the bonus");
     expect(config.finalChaseEnabled(), "final chase setter should enable final chase");
     expect(!config.tiesAllowed(), "allow ties setter should disable ties");
+    expect(!config.stealingEnabled(), "stealing setter should disable the optional variant");
 
     config.adjustBankThreshold(-2000);
     expectEqual(config.getBankThreshold(), static_cast<uint32_t>(0), "bank threshold should clamp at zero");
@@ -646,6 +806,11 @@ int main()
     runTest("emptyDiceAfterScoringResetsToHotDice", emptyDiceAfterScoringResetsToHotDice);
     runTest("bankingRequiresRollSelectionScoreAndThreshold", bankingRequiresRollSelectionScoreAndThreshold);
     runTest("endTurnAndBankMovesRoundScoreOnlyWhenAllowed", endTurnAndBankMovesRoundScoreOnlyWhenAllowed);
+    runTest("disabledStealingNeverCreatesOffer", disabledStealingNeverCreatesOffer);
+    runTest("stealingCopiesBankedContinuationAndChains", stealingCopiesBankedContinuationAndChains);
+    runTest("stealingCannotPutPlayerOnBoardAndCanBeDeclined", stealingCannotPutPlayerOnBoardAndCanBeDeclined);
+    runTest("stealingBustEndsChainWithoutFirstRollBonus", stealingBustEndsChainWithoutFirstRollBonus);
+    runTest("hotDiceEndsStealChainAndCannotBeOffered", hotDiceEndsStealChainAndCannotBeOffered);
     runTest("finalRoundRequiresBeatingLeaderWhenTiesDisabled", finalRoundRequiresBeatingLeaderWhenTiesDisabled);
     runTest("turnOrderFinalRoundAndResetStateWrapSafely", turnOrderFinalRoundAndResetStateWrapSafely);
     runTest("selectionAndSavedMultipleStateResetCorrectly", selectionAndSavedMultipleStateResetCorrectly);

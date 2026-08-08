@@ -81,6 +81,7 @@ namespace {
     constexpr float TURN_BTN_BANK_Y   = BASE_CONTENT_Y;
     constexpr float TURN_BTN_PASS_X   = TURN_BTN_ROLL_X;
     constexpr float TURN_BTN_PASS_Y   = BASE_CONTENT_Y;
+    constexpr float STEAL_NOTICE_Y    = TURN_BTN_ROLL_Y + BUTTON_HEIGHT + 12.f;
     constexpr float FIRST_BUST_NOTICE_Y = TURN_BTN_ROLL_Y + 200.f;
     constexpr float OPTION_START_Y    = BASE_CONTENT_Y + BASE_STEP + BASE_GAP;
     constexpr float OPTION_STEP_Y     = BASE_STEP;
@@ -444,6 +445,9 @@ void GameUI::renderRules(GameManager& game, const std::vector<sf::Event>& events
         "\t- Scoring dice are removed; reroll the rest. Hot dice lets you roll all six again.",
         "\t- Bust: no scoring options loses your unbanked points (first-roll bonus gives +50 if enabled).",
         "\t- Bank after at least one scored option and meeting the bank threshold to end your turn.",
+        "Stealing (optional):",
+        "\t- Once on the board, roll the prior player's unrolled dice to copy and continue that score.",
+        "\t- A fresh roll, bust, or hot dice ends the chain; stealing cannot put a player on the board.",
         "Win:",
         "\t- If final-chase is off: first to bank past the limit wins.",
         "\t- If final-chase is on: once someone banks past the limit, everyone else gets one last turn to beat that score.",
@@ -458,7 +462,7 @@ void GameUI::renderRules(GameManager& game, const std::vector<sf::Event>& events
         t.setFillColor(COLOR_TEXT_MUTED);
         t.setPosition(textX, textY);
         window.draw(t);
-        textY += 34.f;
+        textY += 31.f;
     }
 
     // Draw Back button
@@ -573,7 +577,8 @@ void GameUI::renderSetup(
         {"Animations", config.animationsEnabled(), [&config]()->void { config.toggleAnimations(); }},
         {"First-Roll Bust Bonus", config.firstRollBustBonusEnabled(), [&config]()->void { config.toggleFirstRollBustBonus(); }},
         {"Final Chase Round", config.finalChaseEnabled(), [&config]()->void { config.toggleFinalChase(); }},
-        {"Allow Ties", config.tiesAllowed(), [&config]()->void { config.toggleAllowTies(); }}
+        {"Allow Ties", config.tiesAllowed(), [&config]()->void { config.toggleAllowTies(); }},
+        {"Stealing", config.stealingEnabled(), [&config]()->void { config.toggleStealing(); }}
     };
     
     // Two-column layout for toggles.
@@ -861,12 +866,29 @@ void GameUI::renderTurn(
         }
     };
 
-    // Offer the roll button when waiting to start or continue the turn.
+    // Offer either the steal decision or the normal roll action.
     if (waitingForRoll && !game.getBustPending()) {
-        const char* rollLabel = game.getHasRolledThisTurn() ? "Roll Again" : "Roll Dice";
-        primaryButtons.emplace_back(makeButton(TURN_BTN_ROLL_X, TURN_BTN_ROLL_Y, BUTTON_WIDTH, BUTTON_HEIGHT, rollLabel, [&]()->void {
-            performRoll();
-        }));
+        if (game.hasStealOfferForCurrentPlayer()) {
+            if (game.canCurrentPlayerSteal()) {
+                const std::string stealLabel = "Steal " + std::to_string(game.getStealOfferDiceCount()) +
+                                               " Dice (+" + std::to_string(game.getStealOfferScore()) + ")";
+                primaryButtons.emplace_back(makeButton(TURN_BTN_ROLL_X, TURN_BTN_ROLL_Y, BUTTON_WIDTH, BUTTON_HEIGHT, stealLabel, [&]()->void {
+                    if (game.acceptStealOffer())
+                        performRoll();
+                }));
+            }
+
+            const float freshButtonX = game.canCurrentPlayerSteal() ? TURN_BTN_BANK_X : TURN_BTN_ROLL_X;
+            primaryButtons.emplace_back(makeButton(freshButtonX, TURN_BTN_ROLL_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Fresh Roll (6 Dice)", [&]()->void {
+                game.declineStealOffer();
+                performRoll();
+            }));
+        } else {
+            const char* rollLabel = game.getHasRolledThisTurn() ? "Roll Again" : "Roll Dice";
+            primaryButtons.emplace_back(makeButton(TURN_BTN_ROLL_X, TURN_BTN_ROLL_Y, BUTTON_WIDTH, BUTTON_HEIGHT, rollLabel, [&]()->void {
+                performRoll();
+            }));
+        }
     }
 
     // Allow banking after at least one roll if total (permanent + round) meets threshold and no bust is pending.
@@ -1039,6 +1061,27 @@ void GameUI::renderTurn(
         bonusText.setFillColor(sf::Color(230, 210, 80, 240));
         bonusText.setPosition(static_cast<float>(tsize.x) * 0.28f, FIRST_BUST_NOTICE_Y);
         window.draw(bonusText);
+    }
+
+    // Explain a pending or active steal continuation.
+    if (!animating && game.hasStealOfferForCurrentPlayer()) {
+        std::string stealNotice;
+        if (game.canCurrentPlayerSteal()) {
+            stealNotice = "Steal available: carry " + std::to_string(game.getStealOfferScore()) +
+                          " points on " + std::to_string(game.getStealOfferDiceCount()) + " dice, or roll fresh.";
+        } else {
+            stealNotice = "Steal locked until your banked score reaches " +
+                          std::to_string(game.getRuleConfig().getBankThreshold()) + ". Roll fresh.";
+        }
+        sf::Text stealText(stealNotice, uiFont, SCORE_FONT_SIZE);
+        stealText.setFillColor(sf::Color(230, 210, 80, 240));
+        stealText.setPosition(BASE_GAP, STEAL_NOTICE_Y);
+        window.draw(stealText);
+    } else if (!animating && game.isStealContinuationActive()) {
+        sf::Text stealText("Steal continuation active: the carried round score is at risk.", uiFont, SCORE_FONT_SIZE);
+        stealText.setFillColor(sf::Color(230, 210, 80, 240));
+        stealText.setPosition(BASE_GAP, STEAL_NOTICE_Y);
+        window.draw(stealText);
     }
 
     // Prompt user when awaiting a score selection and no primary actions are visible.

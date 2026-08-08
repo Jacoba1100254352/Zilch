@@ -11,6 +11,7 @@ Description:
 #ifndef ZILCH_GAME_MANAGER_H
 #define ZILCH_GAME_MANAGER_H
 
+#include <optional>
 #include <vector>
 #include "GameStateMachine.h"
 #include "Player.h"
@@ -49,6 +50,14 @@ public:
 	void startTurn(size_t playerIndex);
 	void endTurnAndBank();
 	[[nodiscard]] bool canBankCurrentScore() const;
+	[[nodiscard]] bool hasStealOfferForCurrentPlayer() const;
+	[[nodiscard]] bool canCurrentPlayerSteal() const;
+	[[nodiscard]] uint16_t getStealOfferDiceCount() const;
+	[[nodiscard]] uint32_t getStealOfferScore() const;
+	[[nodiscard]] bool acceptStealOffer();
+	void declineStealOffer();
+	[[nodiscard]] bool isStealContinuationActive() const { return stealContinuationActive; }
+	void endStealChain();
 	void switchToNextPlayer();
 	[[nodiscard]] Player* findHighestScoringPlayer();
 	[[nodiscard]] const Player* getWinner() const;
@@ -92,6 +101,14 @@ public:
 	void setValueOfChosenMultiple(uint16_t chosenMultipleValue);
 
 private:
+	struct StealOffer {
+		size_t recipientIndex;
+		uint16_t diceCount;
+		uint32_t roundScore;
+		uint16_t savedMultipleValue;
+		uint32_t savedMultipleScore;
+	};
+
 	std::vector<Player> players;
 	Player* currentPlayer;
 	size_t currentIndex;
@@ -106,6 +123,8 @@ private:
 	bool finalRoundActive{false};
 	size_t finalRoundStarterIndex{0};
 	size_t finalRoundLeaderIndex{0};
+	std::optional<StealOffer> stealOffer;
+	bool stealContinuationActive{false};
 	RuleConfig ruleConfig;
 	GameStateMachine stateMachine;
 };

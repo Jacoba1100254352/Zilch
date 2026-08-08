@@ -54,7 +54,8 @@ void Checker::handleBusts() const
         return;
 
     // Optional first-roll bust bonus: award 50 points and restart dice if enabled and unused.
-    if (game.getRuleConfig().firstRollBustBonusEnabled() &&
+    if (!game.isStealContinuationActive() &&
+        game.getRuleConfig().firstRollBustBonusEnabled() &&
         dice.getNumDiceInPlay() >= 1 &&
         game.getRollCountThisTurn() == 1 &&
         !game.getBustBonusUsedThisTurn()) {
@@ -69,6 +70,7 @@ void Checker::handleBusts() const
 
     if (dice.getNumDiceInPlay() >= 1) {
         score.setRoundScore(0);
+        game.endStealChain();
         game.setTurnContinuationStatus(false, true);
     } else {
         game.manageDiceCount(FULL_SET_OF_DICE);

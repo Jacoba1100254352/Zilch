@@ -30,7 +30,11 @@ stateDiagram-v2
     Intro --> PlayerTurn: Start
 
     state PlayerTurn {
-        [*] --> WaitingForRoll
+        [*] --> TurnStart
+        TurnStart --> StealDecision: prior player banked with 1-5 dice
+        TurnStart --> WaitingForRoll: no steal offer
+        StealDecision --> Rolled: steal carried score and roll remaining dice
+        StealDecision --> Rolled: decline and roll six fresh dice
         WaitingForRoll --> Rolled: Roll Dice
         Rolled --> AwaitingSelection: scoring options exist
         Rolled --> FirstRollBustBonus: no options on first roll
@@ -75,6 +79,8 @@ classDiagram
         +startTurn()
         +registerRoll()
         +endTurnAndBank()
+        +acceptStealOffer()
+        +declineStealOffer()
         +startFinalRound()
     }
     class GameStateMachine {
@@ -88,6 +94,7 @@ classDiagram
         +toggleFirstRollBustBonus()
         +finalChaseEnabled()
         +tiesAllowed()
+        +stealingEnabled()
     }
     class Checker {
         -GameManager& game
@@ -182,8 +189,15 @@ First-roll bust behavior:
 - The bonus is tracked per turn and can only be used once; any later bust clears unbanked round points and requires passing dice.
 - The behavior is covered by `ZilchRulesTests` through the `firstRollBustBonusIsOneTimeAndRestartsRoll`, `disabledBustBonusBustsImmediately`, and `nonBustHandsDoNotTriggerBustHandling` cases.
 
+Stealing behavior:
+- Stealing is an optional setup toggle and is disabled by default.
+- When a player banks with one to five dice unrolled, the immediately following player may roll those dice and copy the completed round score as the start of a continuation. The prior player keeps the score they banked.
+- The offer is available only to a player whose permanent score already meets the configured bank threshold, so stealing cannot put a player on the board.
+- A successful continuation can be banked and offered again with its larger carried score. Choosing a fresh six-die roll, busting, or scoring all available dice ends the chain.
+- A bust during a steal loses the carried score and is not rescued by the optional first-roll bust bonus.
+
 Run tests:
 - `ctest --test-dir build --output-on-failure`
 - `make test`
 
-The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking gates, final-round and winner state, state-machine descriptions, and resource path resolution.
+The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking and stealing gates, steal chaining and termination, final-round and winner state, state-machine descriptions, and resource path resolution.

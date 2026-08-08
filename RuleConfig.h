@@ -24,7 +24,7 @@ public:
 	RuleConfig()
 		: enableStraits(true), enableSets(true), enableMultiples(true), enableSingles(true),
 		  enableAnimations(true), bankThreshold(1000), enableFirstRollBustBonus(true),
-		  enableFinalChase(true), allowTies(false) {}
+		  enableFinalChase(true), allowTies(false), enableStealing(false) {}
 
 	[[nodiscard]] bool straitsEnabled() const { return enableStraits; }
 	[[nodiscard]] bool setsEnabled() const { return enableSets; }
@@ -35,6 +35,7 @@ public:
 	[[nodiscard]] bool firstRollBustBonusEnabled() const { return enableFirstRollBustBonus; }
 	[[nodiscard]] bool finalChaseEnabled() const { return enableFinalChase; }
 	[[nodiscard]] bool tiesAllowed() const { return allowTies; }
+	[[nodiscard]] bool stealingEnabled() const { return enableStealing; }
 
 	void toggleStraits() { enableStraits = !enableStraits; }
 	void toggleSets() { enableSets = !enableSets; }
@@ -44,6 +45,7 @@ public:
 	void toggleFirstRollBustBonus() { enableFirstRollBustBonus = !enableFirstRollBustBonus; }
 	void toggleFinalChase() { enableFinalChase = !enableFinalChase; }
 	void toggleAllowTies() { allowTies = !allowTies; }
+	void toggleStealing() { enableStealing = !enableStealing; }
 	void adjustBankThreshold(const int32_t delta) {
 		const int64_t updated = static_cast<int64_t>(bankThreshold) + delta;
 		bankThreshold = static_cast<uint32_t>(updated < 0 ? 0 : updated);
@@ -57,6 +59,7 @@ public:
 	void setFirstRollBustBonusEnabled(const bool enabled) { enableFirstRollBustBonus = enabled; }
 	void setFinalChaseEnabled(const bool enabled) { enableFinalChase = enabled; }
 	void setAllowTies(const bool enabled) { allowTies = enabled; }
+	void setStealingEnabled(const bool enabled) { enableStealing = enabled; }
 
 private:
 	bool enableStraits;
@@ -68,6 +71,7 @@ private:
 	bool enableFirstRollBustBonus;
 	bool enableFinalChase;
 	bool allowTies;
+	bool enableStealing;
 };
 
 #endif // ZILCH_RULE_CONFIG_H
