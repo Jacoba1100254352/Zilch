@@ -60,6 +60,7 @@ private:
 	mutable std::vector<glm::vec3> normals;
 	mutable std::vector<unsigned int> bodyIndices; // “Material” (die body)
 	mutable std::vector<unsigned int> pipIndices;  // “Material.001” (pips)
+	mutable std::array<std::vector<unsigned int>, 6> pipFaceIndices; // Pips grouped by model-space cube face
 
 	// State data
 	mutable bool resourcesLoaded = false;

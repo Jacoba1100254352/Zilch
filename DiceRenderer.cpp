@@ -170,6 +170,9 @@ void DiceRenderer::ensureResourcesLoaded() const {
 	// Clear existing index lists.
 	bodyIndices.clear();
 	pipIndices.clear();
+	for (auto& faceIndices : pipFaceIndices) {
+		faceIndices.clear();
+	}
 
 	// Partition triangles by material.
 	const std::size_t triCount = matIDs.size();
@@ -186,6 +189,12 @@ void DiceRenderer::ensureResourcesLoaded() const {
 			pipIndices.push_back(i0);
 			pipIndices.push_back(i1);
 			pipIndices.push_back(i2);
+
+			const glm::vec3 centroid = (vertices.at(i0) + vertices.at(i1) + vertices.at(i2)) / 3.f;
+			auto& faceIndices = pipFaceIndices.at(faceIndexFromVector({centroid.x, centroid.y, centroid.z}));
+			faceIndices.push_back(i0);
+			faceIndices.push_back(i1);
+			faceIndices.push_back(i2);
 		}
 	}
 
@@ -541,6 +550,22 @@ void DiceRenderer::draw(sf::RenderTarget& target, const sf::Font* labelFont) con
 		}
 	}
 
+	// The camera faces along -Z, so larger Z values are farther away.
+	auto sortBackToFront = [](std::vector<Triangle2D>& triangles)->void {
+		std::ranges::sort(
+			triangles, [](const Triangle2D& a, const Triangle2D& b)->bool
+			{
+				return a.depth > b.depth;
+			}
+		);
+	};
+
+	// Reuse triangle buffers across dice to avoid reallocating large model data.
+	std::vector<Triangle2D> bodyTris;
+	bodyTris.reserve(bodyIndices.size() / 3);
+	std::vector<Triangle2D> pipTris;
+	pipTris.reserve(pipIndices.size() / 3);
+
 	// Draw each die
 	for (std::size_t i = 0; i < currentValues.size(); ++i) {
 		// Compute per-die offset in grid.
@@ -564,22 +589,35 @@ void DiceRenderer::draw(sf::RenderTarget& target, const sf::Font* labelFont) con
 			std::lerp(spin * ROTATE_Z_SPIN_FACTOR, orient.z, settle)
 		};
 
-		// Collect triangles
-		std::vector<Triangle2D> tris;
-		addTrianglesForMaterial(rotation, offset, bodyIndices, BODY_COLOR, tris);
-		// Require pip faces to be more front-facing to avoid far-side bleed-through.
-		addTrianglesForMaterial(rotation, offset, pipIndices,  PIP_COLOR,  tris, PIP_MIN_FACING_COS);
+		// Draw the die body first.
+		bodyTris.clear();
+		addTrianglesForMaterial(rotation, offset, bodyIndices, BODY_COLOR, bodyTris);
+		sortBackToFront(bodyTris);
+		for (const Triangle2D& t : bodyTris) {
+			target.draw(&t.v0, 3, sf::Triangles);
+		}
 
-		// Sort by depth (back to front)
-		std::ranges::sort(
-			tris, [](const Triangle2D& a, const Triangle2D& b)->bool
-			{
-				return a.depth < b.depth;
+		// The model's recessed pip mesh overlaps the body surface. Draw only pip
+		// groups whose cube face points toward the camera, then composite those
+		// groups over the body. Per-triangle culling alone admits curved triangles
+		// from hidden faces, which produces white fragments around the die edges.
+		pipTris.clear();
+		for (std::size_t face = 0; face < pipFaceIndices.size(); ++face) {
+			const sf::Vector3f faceNormal = applyRotation(axisDirFromIndex(face), rotation);
+			if (dot3(faceNormal, VIEW_DIR) <= PIP_MIN_FACING_COS) {
+				continue;
 			}
-		);
-
-		// Draw triangles
-		for (const Triangle2D& t : tris) {
+			addTrianglesForMaterial(
+				rotation,
+				offset,
+				pipFaceIndices[face],
+				PIP_COLOR,
+				pipTris,
+				PIP_MIN_FACING_COS
+			);
+		}
+		sortBackToFront(pipTris);
+		for (const Triangle2D& t : pipTris) {
 			target.draw(&t.v0, 3, sf::Triangles);
 		}
 
