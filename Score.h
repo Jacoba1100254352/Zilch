@@ -22,7 +22,7 @@ Manages player scoring, including permanent and round scores, score limits, and 
 class Score {
 public:
     // Constructor initializes scores and score limit.
-    Score() : scoreLimit(2000), permanentScore(0), roundScore(0), scoreFromMultiples(0) {}
+    Score() : scoreLimit(5000), permanentScore(0), roundScore(0), scoreFromMultiples(0) {}
 
     // Accessor and mutator methods for score limit and scores.
     [[nodiscard]] uint32_t getScoreLimit() const { return scoreLimit; }

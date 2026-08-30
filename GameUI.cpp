@@ -317,13 +317,17 @@ void GameUI::renderIntro(
         COLOR_BUTTON_ALT,
         COLOR_TEXT_PRIMARY
     );
+    const bool canStart = game.getRuleConfig().hasScoringRuleEnabled();
     Button startBtn = makeButton(
         centerX,
         introButtonsStartY + introButtonsStepY * 2.f,
         BUTTON_WIDTH,
         BUTTON_HEIGHT,
-        "Start",
-        [&]()->void {
+        canStart ? "Start" : "Start Disabled",
+        [&, canStart]()->void {
+            if (!canStart)
+                return;
+            game.accessRuleConfig().clampOpeningScoreLimitTo(scoreLimit);
             game.setPlayers(playerNames);
             game.setScoreLimit(scoreLimit);
             game.startTurn(0);
@@ -332,7 +336,7 @@ void GameUI::renderIntro(
             optionButtons.clear();
             game.getStateMachine().setState(GameStateMachine::State::PlayerTurn);
         },
-        COLOR_BUTTON_ALT,
+        canStart ? COLOR_BUTTON_ALT : COLOR_TOGGLE_OFF,
         COLOR_TEXT_PRIMARY
     );
 
@@ -358,6 +362,12 @@ void GameUI::renderIntro(
     desc.setFillColor(COLOR_TEXT_MUTED);
     desc.setPosition(introTitleX, INTRO_PANEL_Y + INTRO_DESC_Y_FRAC * INTRO_PANEL_H);
     window.draw(desc);
+    if (!canStart) {
+        sf::Text warning("Start disabled: enable at least one scoring rule in Setup.", uiFont, INTRO_DESC_SIZE);
+        warning.setFillColor(COLOR_BUST_TEXT);
+        warning.setPosition(introTitleX, startBtn.y + startBtn.h + 16.f);
+        window.draw(warning);
+    }
 
     // Draw buttons
     const std::vector<Button> introButtons {setupBtn, rulesBtn, startBtn};
@@ -434,8 +444,8 @@ void GameUI::renderRules(GameManager& game, const std::vector<sf::Event>& events
     // Draw rules text
     const std::vector<std::string> lines = {
         "Basics:",
-        "\t- You must reach the bank threshold before your banked total counts toward victory.",
-        "\t- Sets (three pairs) and straits (1-2-3-4-5-6) are worth 1000.",
+        "\t- Your first bank must reach the configured Opening Score.",
+        "\t- Straight (1-2-3-4-5-6) and Three Pairs are worth 1000.",
         "Multiples:",
         "\t- Three of a kind scores 100 x the face (1-1-1 is 1000).",
         "\t- Each extra matching die doubles that combo (3-3-3-3 = 600; 1-1-1-1-1 = 4000).",
@@ -444,13 +454,13 @@ void GameUI::renderRules(GameManager& game, const std::vector<sf::Event>& events
         "Flow:",
         "\t- Scoring dice are removed; reroll the rest. Hot dice lets you roll all six again.",
         "\t- Bust: no scoring options loses your unbanked points (first-roll bonus gives +50 if enabled).",
-        "\t- Bank after at least one scored option and meeting the bank threshold to end your turn.",
+        "\t- Bank after at least one scored option and meeting the Opening Score to end your turn.",
         "Stealing (optional):",
         "\t- Once on the board, roll the prior player's unrolled dice to copy and continue that score.",
         "\t- A fresh roll, bust, or hot dice ends the chain; stealing cannot put a player on the board.",
         "Win:",
-        "\t- If final-chase is off: first to bank past the limit wins.",
-        "\t- If final-chase is on: once someone banks past the limit, everyone else gets one last turn to beat that score.",
+        "\t- If final-chase is off: first to reach or exceed the winning score wins.",
+        "\t- If final-chase is on: reaching the winning score gives everyone else one last turn.",
         "\t- Ties: allowed per toggle."
     };
 
@@ -522,16 +532,17 @@ void GameUI::renderSetup(
             const uint32_t parsed = parseUintSafe(scoreLimitBuffer, scoreLimit);
             const uint32_t clamped = std::clamp<uint32_t>(parsed, 1000u, 1000000u);
             scoreLimit = clamped;
+            config.clampOpeningScoreLimitTo(scoreLimit);
             editingScoreLimit = false;
             scoreLimitBuffer.clear();
         }
     };
     auto commitBankThreshold = [&]()->void {
-        // Commit bank threshold edit if in progress
+        // Commit Opening Score edit if in progress.
         if (editingBankThreshold) {
-            const uint32_t parsed = parseUintSafe(bankThresholdBuffer, config.getBankThreshold());
-            const uint32_t clamped = std::clamp<uint32_t>(parsed, 0u, 1000000u);
-            config.setBankThreshold(clamped);
+            const uint32_t parsed = parseUintSafe(bankThresholdBuffer, config.getOpeningScoreLimit());
+            const uint32_t clamped = std::clamp<uint32_t>(parsed, 0u, scoreLimit);
+            config.setOpeningScoreLimit(clamped);
             editingBankThreshold = false;
             bankThresholdBuffer.clear();
         }
@@ -549,18 +560,22 @@ void GameUI::renderSetup(
         if (playerNames.size() > 1)
             playerNames.pop_back();
     }));
-    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW2_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "+500 Limit", [&scoreLimit]()->void {
-        scoreLimit += 500;
+    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW2_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "+500 Winning Score", [&scoreLimit]()->void {
+        scoreLimit = std::min<uint32_t>(scoreLimit + 500, 1000000u);
     }));
-    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW2_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "-500 Limit", [&scoreLimit]()->void {
+    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW2_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "-500 Winning Score", [&scoreLimit, &config]()->void {
         if (scoreLimit > 1000)
-            scoreLimit -= 500;
+            scoreLimit = scoreLimit > 1500 ? scoreLimit - 500 : 1000;
+        config.clampOpeningScoreLimitTo(scoreLimit);
     }));
-    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW3_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "+100 Bank Threshold", [&config]()->void {
-        config.adjustBankThreshold(100);
+    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW3_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "+100 Opening Score", [&config, &scoreLimit]()->void {
+        config.clampOpeningScoreLimitTo(scoreLimit);
+        const uint32_t current = config.getOpeningScoreLimit();
+        const uint32_t increase = std::min<uint32_t>(100, scoreLimit - current);
+        config.adjustOpeningScoreLimit(static_cast<int32_t>(increase));
     }));
-    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW3_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "-100 Bank Threshold", [&config]()->void {
-        config.adjustBankThreshold(-100);
+    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW3_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "-100 Opening Score", [&config]()->void {
+        config.adjustOpeningScoreLimit(-100);
     }));
 
     // Rule configuration toggles
@@ -570,8 +585,8 @@ void GameUI::renderSetup(
         std::function<void()> toggle;
     };
     std::vector<ToggleOpt> toggleOpts = {
-        {"Straits",    config.straitsEnabled(),    [&config]()->void { config.toggleStraits(); }},
-        {"Sets",       config.setsEnabled(),       [&config]()->void { config.toggleSets(); }},
+        {"Straight",    config.straightEnabled(),   [&config]()->void { config.toggleStraight(); }},
+        {"Three Pairs", config.threePairsEnabled(), [&config]()->void { config.toggleThreePairs(); }},
         {"Multiples",  config.multiplesEnabled(),  [&config]()->void { config.toggleMultiples(); }},
         {"Singles",    config.singlesEnabled(),    [&config]()->void { config.toggleSingles(); }},
         {"Animations", config.animationsEnabled(), [&config]()->void { config.toggleAnimations(); }},
@@ -664,7 +679,7 @@ void GameUI::renderSetup(
             constexpr float scoreY = SETUP_LABEL_Y;
             constexpr float bankY = SETUP_LABEL_Y + SETUP_BANK_LABEL_Y_OFFSET;
 
-            // Score limit and bank threshold hit test
+            // Score limit and Opening Score hit test.
             bool consumed = false;
             if (mx >= scoreX && mx <= scoreX + SCORE_INPUT_HIT_WIDTH && my >= scoreY && my <= scoreY + SCORE_INPUT_HIT_HEIGHT) {
                 commitBankThreshold();
@@ -680,7 +695,7 @@ void GameUI::renderSetup(
                 focusedNameIndex = -1;
                 nameEditBuffer.clear();
                 editingBankThreshold = true;
-                bankThresholdBuffer = std::to_string(config.getBankThreshold());
+                bankThresholdBuffer = std::to_string(config.getOpeningScoreLimit());
                 consumed = true;
             }
 
@@ -743,21 +758,28 @@ void GameUI::renderSetup(
         nameY += PLAYER_Y_OFFSET;
     }
 
-    // Display current score limit.
+    // Display the configured Winning Score.
     const bool scoreFocused = editingScoreLimit;
     const std::string scoreDisplay = scoreFocused ? scoreLimitBuffer + "|" : std::to_string(scoreLimit);
-    sf::Text scoreLabel("Score Limit: " + scoreDisplay, uiFont, LABEL_FONT_SIZE);
+    sf::Text scoreLabel("Winning Score: " + scoreDisplay, uiFont, LABEL_FONT_SIZE);
     scoreLabel.setFillColor(COLOR_TEXT_PRIMARY);
     scoreLabel.setPosition(SETUP_INFO_X, SETUP_LABEL_Y);
     window.draw(scoreLabel);
 
-    // Display current bank threshold.
+    // Display the configured Opening Score.
     const bool bankFocused = editingBankThreshold;
-    const std::string bankDisplay = bankFocused ? bankThresholdBuffer + "|" : std::to_string(config.getBankThreshold());
-    sf::Text bankLabel("Bank Threshold: " + bankDisplay, uiFont, LABEL_FONT_SIZE);
+    const std::string bankDisplay = bankFocused ? bankThresholdBuffer + "|" : std::to_string(config.getOpeningScoreLimit());
+    sf::Text bankLabel("Opening Score: " + bankDisplay, uiFont, LABEL_FONT_SIZE);
     bankLabel.setFillColor(COLOR_TEXT_PRIMARY);
     bankLabel.setPosition(SETUP_INFO_X, SETUP_LABEL_Y + SETUP_BANK_LABEL_Y_OFFSET);
     window.draw(bankLabel);
+
+    if (!config.hasScoringRuleEnabled()) {
+        sf::Text warning("Start disabled: enable at least one scoring rule.", uiFont, INTRO_DESC_SIZE);
+        warning.setFillColor(COLOR_BUST_TEXT);
+        warning.setPosition(SETUP_LEFT_X, backBtnY + BUTTON_HEIGHT + 16.f);
+        window.draw(warning);
+    }
 
     // Draw all setup buttons.
     for (const Button& b : buttons) {
@@ -994,8 +1016,8 @@ void GameUI::renderTurn(
     header.setPosition(HEADER_X, HEADER_Y);
     window.draw(header);
 
-    // Draw bank threshold info.
-    const std::string thresholdText = "Bank Threshold: " + std::to_string(game.getRuleConfig().getBankThreshold());
+    // Draw Opening Score information.
+    const std::string thresholdText = "Opening Score: " + std::to_string(game.getRuleConfig().getOpeningScoreLimit());
     sf::Text threshold(thresholdText, uiFont, SCORE_FONT_SIZE);
     threshold.setFillColor(COLOR_TEXT_MUTED);
     threshold.setPosition(HEADER_X, INFO_BASE_Y);
@@ -1070,8 +1092,8 @@ void GameUI::renderTurn(
             stealNotice = "Steal available: carry " + std::to_string(game.getStealOfferScore()) +
                           " points on " + std::to_string(game.getStealOfferDiceCount()) + " dice, or roll fresh.";
         } else {
-            stealNotice = "Steal locked until your banked score reaches " +
-                          std::to_string(game.getRuleConfig().getBankThreshold()) + ". Roll fresh.";
+            stealNotice = "Steal locked until your banked score reaches the Opening Score of " +
+                          std::to_string(game.getRuleConfig().getOpeningScoreLimit()) + ". Roll fresh.";
         }
         sf::Text stealText(stealNotice, uiFont, SCORE_FONT_SIZE);
         stealText.setFillColor(sf::Color(230, 210, 80, 240));

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -121,7 +122,7 @@ void diceRollMaintainsConsistentState()
 void scoreAndPlayerDefaultsAreStable()
 {
     Score score;
-    expectEqual(score.getScoreLimit(), static_cast<uint32_t>(2000), "score should default to the original game limit");
+    expectEqual(score.getScoreLimit(), static_cast<uint32_t>(5000), "score should default to the shared winning score");
     expectEqual(score.getPermanentScore(), static_cast<uint32_t>(0), "permanent score should default to zero");
     expectEqual(score.getRoundScore(), static_cast<uint32_t>(0), "round score should default to zero");
     expectEqual(score.getScoreFromMultiples(), static_cast<uint32_t>(0), "saved multiple score should default to zero");
@@ -139,6 +140,98 @@ void scoreAndPlayerDefaultsAreStable()
     expectEqual(player.getName(), std::string("Alice"), "player should retain its configured name");
     expectEqual(player.getDice().getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "new players should start with a full dice set");
     expectEqual(player.getScore().getPermanentScore(), static_cast<uint32_t>(0), "new players should start unscored");
+}
+
+void sharedDefaultsAndOpeningScoreAliasesAreStable()
+{
+    RuleConfig config;
+    expect(config.straightEnabled() && config.straitsEnabled(), "Straight aliases should be enabled by default");
+    expect(config.threePairsEnabled() && config.setsEnabled(), "Three Pairs aliases should be enabled by default");
+    expect(config.multiplesEnabled(), "Multiples should be enabled by default");
+    expect(config.singlesEnabled(), "Singles should be enabled by default");
+    expect(config.firstRollBustBonusEnabled(), "First-Roll Bust should be enabled by default");
+    expect(config.finalChaseEnabled(), "Final Chase should be enabled by default");
+    expect(config.tiesAllowed(), "Allow Ties should be enabled by default");
+    expect(!config.stealingEnabled(), "Stealing should be disabled by default");
+    expect(config.hasScoringRuleEnabled(), "the shared defaults should include scoring rules");
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(1000), "Opening Score should default to 1000");
+    expectEqual(config.getOpeningScore(), config.getOpeningScoreLimit(), "short getter should alias Opening Score Limit");
+    expectEqual(config.getBankThreshold(), config.getOpeningScoreLimit(), "legacy getter should alias Opening Score Limit");
+
+    config.setStraightEnabled(false);
+    expect(!config.straitsEnabled(), "legacy Straight getter should reflect the canonical setter");
+    config.toggleStraits();
+    expect(config.straightEnabled(), "legacy Straight toggle should update the canonical state");
+    config.setThreePairsEnabled(false);
+    expect(!config.setsEnabled(), "legacy Three Pairs getter should reflect the canonical setter");
+    config.toggleSets();
+    expect(config.threePairsEnabled(), "legacy Three Pairs toggle should update the canonical state");
+
+    config.setOpeningScoreLimit(750);
+    expectEqual(config.getOpeningScore(), static_cast<uint32_t>(750), "short getter should see canonical setter changes");
+    expectEqual(config.getBankThreshold(), static_cast<uint32_t>(750), "legacy getter should see canonical setter changes");
+    config.adjustBankThreshold(250);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(1000), "legacy adjuster should update Opening Score Limit");
+    config.setBankThreshold(600);
+    config.adjustOpeningScore(-100);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(500), "short adjuster should update the canonical value");
+    config.setOpeningScore(400);
+    config.adjustOpeningScoreLimit(100);
+    expectEqual(config.getBankThreshold(), static_cast<uint32_t>(500), "canonical adjuster should update compatibility getters");
+}
+
+void allDisabledScoringRulesAreDetected()
+{
+    RuleConfig config;
+    config.setStraitsEnabled(false);
+    config.setSetsEnabled(false);
+    config.setMultiplesEnabled(false);
+    config.setSinglesEnabled(false);
+    expect(!config.hasScoringRuleEnabled(), "an all-disabled scoring configuration should be rejected by callers");
+
+    config.setSinglesEnabled(true);
+    expect(config.hasScoringRuleEnabled(), "enabling any scoring rule should make the configuration playable");
+}
+
+void openingScoreClampsToWinningScore()
+{
+    RuleConfig config;
+    config.setOpeningScoreLimit(6000);
+    config.clampOpeningScoreLimitTo(5000);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(5000), "Opening Score should clamp to Winning Score");
+    expectEqual(config.getBankThreshold(), static_cast<uint32_t>(5000), "compatibility getter should reflect the clamp");
+
+    config.setOpeningScoreLimit(750);
+    config.clampOpeningScoreLimitTo(5000);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(750), "a valid Opening Score should remain unchanged");
+
+    config.clampOpeningScoreLimitTo(500);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(500), "lowering Winning Score should clamp Opening Score");
+}
+
+void gameManagerEnforcesSharedSetupInvariants()
+{
+    GameManager game;
+    game.accessRuleConfig().setOpeningScoreLimit(6000);
+    game.setPlayers({"A", "B"});
+    game.setScoreLimit(5000);
+    expectEqual(
+        game.getRuleConfig().getOpeningScoreLimit(),
+        static_cast<uint32_t>(5000),
+        "the gameplay setup boundary should clamp Opening Score to Winning Score"
+    );
+
+    game.accessRuleConfig().setStraightEnabled(false);
+    game.accessRuleConfig().setThreePairsEnabled(false);
+    game.accessRuleConfig().setMultiplesEnabled(false);
+    game.accessRuleConfig().setSinglesEnabled(false);
+    bool rejected = false;
+    try {
+        game.startTurn(0);
+    } catch (const std::logic_error&) {
+        rejected = true;
+    }
+    expect(rejected, "the gameplay core should reject a turn with no scoring rule enabled");
 }
 
 void gameStateMachineDescribesEveryState()
@@ -201,7 +294,7 @@ void singlesScoreOnlyOneDie()
     expect(dice.diceSetMap.at(1) == 1, "one die of value one should remain");
 }
 
-void straightsAndSetsScoreHotDice()
+void straightAndThreePairsScoreHotDice()
 {
     GameManager straightGame;
     prepareTurn(straightGame, {"A", "B"});
@@ -209,8 +302,13 @@ void straightsAndSetsScoreHotDice()
 
     const Checker straightChecker(straightGame);
     std::vector<Checker::Option> options = straightChecker.getAvailableOptions();
-    expect(hasOption(options, "Apply strait (1000)"), "one-through-six should expose straight scoring");
-    runOption(options, "Apply strait (1000)");
+    expect(straightChecker.isStraight() && straightChecker.isStrait(), "Straight checker aliases should agree");
+    expect(
+        zilch::rules::RuleType::Straight == zilch::rules::RuleType::Strait,
+        "Straight rule-type aliases should agree"
+    );
+    expect(hasOption(options, "Apply Straight (1000)"), "one-through-six should expose Straight scoring");
+    runOption(options, "Apply Straight (1000)");
 
     expectEqual(straightGame.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(1000), "straight should score 1000");
     expectEqual(straightDice.getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "scoring all dice should reset to hot dice");
@@ -223,8 +321,13 @@ void straightsAndSetsScoreHotDice()
 
     const Checker setChecker(setGame);
     options = setChecker.getAvailableOptions();
-    expect(hasOption(options, "Apply set (3 pairs)"), "three pairs should expose set scoring");
-    runOption(options, "Apply set (3 pairs)");
+    expect(setChecker.isThreePairs() && setChecker.isSet(), "Three Pairs checker aliases should agree");
+    expect(
+        zilch::rules::RuleType::ThreePairs == zilch::rules::RuleType::Set,
+        "Three Pairs rule-type aliases should agree"
+    );
+    expect(hasOption(options, "Apply Three Pairs (1000)"), "three pairs should expose Three Pairs scoring");
+    runOption(options, "Apply Three Pairs (1000)");
 
     expectEqual(setGame.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(1000), "three pairs should score 1000");
     expectEqual(setDiceRef.getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "set should reset to hot dice");
@@ -318,7 +421,7 @@ void ruleTogglesSuppressOnlyTheirConfiguredOptions()
     setDice(straightGame, {{1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}});
     const Checker straightChecker(straightGame);
     std::vector<Checker::Option> options = straightChecker.getAvailableOptions();
-    expect(!hasOption(options, "Apply strait (1000)"), "disabled straights should not be offered");
+    expect(!hasOption(options, "Apply Straight (1000)"), "disabled Straight should not be offered");
     expect(hasOption(options, "Score single 1 (100)"), "disabled straights should not suppress singles");
     expect(hasOption(options, "Score single 5 (50)"), "disabled straights should not suppress singles");
 
@@ -327,7 +430,7 @@ void ruleTogglesSuppressOnlyTheirConfiguredOptions()
     setGame.accessRuleConfig().setSetsEnabled(false);
     setDice(setGame, {{1, 2}, {3, 2}, {6, 2}});
     const Checker setChecker(setGame);
-    expect(!hasOption(setChecker.getAvailableOptions(), "Apply set (3 pairs)"), "disabled sets should not be offered");
+    expect(!hasOption(setChecker.getAvailableOptions(), "Apply Three Pairs (1000)"), "disabled Three Pairs should not be offered");
 
     GameManager multipleGame;
     prepareTurn(multipleGame, {"A", "B"});
@@ -425,7 +528,7 @@ void emptyDiceAfterScoringResetsToHotDice()
     expect(game.getTurnContinuationStatus(), "empty dice reset should keep the turn alive");
 }
 
-void bankingRequiresRollSelectionScoreAndThreshold()
+void bankingRequiresRollSelectionScoreAndOpeningScore()
 {
     GameManager game;
     prepareTurn(game, {"A", "B"});
@@ -439,13 +542,13 @@ void bankingRequiresRollSelectionScoreAndThreshold()
     expect(!game.canBankCurrentScore(), "banking should require selecting a score option");
 
     game.setSelectedOptionStatus(true);
-    game.accessRuleConfig().setBankThreshold(2000);
-    expect(!game.canBankCurrentScore(), "banking should require meeting the threshold");
+    game.accessRuleConfig().setOpeningScoreLimit(2000);
+    expect(!game.canBankCurrentScore(), "banking should require meeting the Opening Score");
 
     score.increasePermanentScore(950);
-    expect(!game.canBankCurrentScore(), "banking should still fail just below threshold");
+    expect(!game.canBankCurrentScore(), "banking should still fail just below the Opening Score");
     score.increasePermanentScore(50);
-    expect(game.canBankCurrentScore(), "banking should pass at the threshold");
+    expect(game.canBankCurrentScore(), "banking should pass at the Opening Score");
 
     game.setTurnContinuationStatus(false, true);
     expect(!game.canBankCurrentScore(), "banking should be blocked while a bust is pending");
@@ -548,7 +651,7 @@ void stealingCannotPutPlayerOnBoardAndCanBeDeclined()
 {
     GameManager game;
     prepareTurn(game, {"A", "B"});
-    game.accessRuleConfig().setBankThreshold(750);
+    game.accessRuleConfig().setOpeningScoreLimit(750);
     game.accessRuleConfig().setStealingEnabled(true);
     game.accessPlayers()[0].getScore().increasePermanentScore(750);
 
@@ -562,7 +665,7 @@ void stealingCannotPutPlayerOnBoardAndCanBeDeclined()
     game.switchToNextPlayer();
     game.startTurn(game.getCurrentIndex());
     expect(game.hasStealOfferForCurrentPlayer(), "an off-board player should still be shown the preceding offer context");
-    expect(!game.canCurrentPlayerSteal(), "a steal must not help a player reach the configured first-bank threshold");
+    expect(!game.canCurrentPlayerSteal(), "a steal must not help a player reach the configured Opening Score");
     expect(!game.acceptStealOffer(), "an ineligible player must not be able to accept a steal");
     expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(0), "a rejected steal must not copy points");
 
@@ -699,7 +802,7 @@ void selectionAndSavedMultipleStateResetCorrectly()
     expectEqual(game.getCurrentPlayer()->getScore().getScoreFromMultiples(), static_cast<uint16_t>(0), "resetSavedMultiple should clear saved multiple score");
 }
 
-void ruleConfigTogglesAndThresholdsAreStable()
+void ruleConfigTogglesAndOpeningScoreAreStable()
 {
     RuleConfig config;
     expect(!config.stealingEnabled(), "stealing should be disabled by default");
@@ -720,7 +823,7 @@ void ruleConfigTogglesAndThresholdsAreStable()
     expect(!config.animationsEnabled(), "animations toggle should disable animations");
     expect(!config.firstRollBustBonusEnabled(), "first-roll bust toggle should disable the bonus");
     expect(!config.finalChaseEnabled(), "final chase toggle should disable final chase");
-    expect(config.tiesAllowed(), "allow ties toggle should enable ties");
+    expect(!config.tiesAllowed(), "allow ties toggle should disable the default");
     expect(config.stealingEnabled(), "stealing toggle should enable the optional variant");
 
     config.setStraitsEnabled(true);
@@ -740,10 +843,10 @@ void ruleConfigTogglesAndThresholdsAreStable()
     expect(!config.tiesAllowed(), "allow ties setter should disable ties");
     expect(!config.stealingEnabled(), "stealing setter should disable the optional variant");
 
-    config.adjustBankThreshold(-2000);
-    expectEqual(config.getBankThreshold(), static_cast<uint32_t>(0), "bank threshold should clamp at zero");
-    config.adjustBankThreshold(250);
-    expectEqual(config.getBankThreshold(), static_cast<uint32_t>(250), "bank threshold should increase from zero");
+    config.adjustOpeningScoreLimit(-2000);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(0), "Opening Score should clamp at zero");
+    config.adjustOpeningScoreLimit(250);
+    expectEqual(config.getOpeningScoreLimit(), static_cast<uint32_t>(250), "Opening Score should increase from zero");
 }
 
 void winnerLookupHandlesEmptyAndHighestScore()
@@ -792,10 +895,14 @@ int main()
 {
     runTest("diceRollMaintainsConsistentState", diceRollMaintainsConsistentState);
     runTest("scoreAndPlayerDefaultsAreStable", scoreAndPlayerDefaultsAreStable);
+    runTest("sharedDefaultsAndOpeningScoreAliasesAreStable", sharedDefaultsAndOpeningScoreAliasesAreStable);
+    runTest("allDisabledScoringRulesAreDetected", allDisabledScoringRulesAreDetected);
+    runTest("openingScoreClampsToWinningScore", openingScoreClampsToWinningScore);
+    runTest("gameManagerEnforcesSharedSetupInvariants", gameManagerEnforcesSharedSetupInvariants);
     runTest("gameStateMachineDescribesEveryState", gameStateMachineDescribesEveryState);
     runTest("singlesDoNotMasqueradeAsMultiples", singlesDoNotMasqueradeAsMultiples);
     runTest("singlesScoreOnlyOneDie", singlesScoreOnlyOneDie);
-    runTest("straightsAndSetsScoreHotDice", straightsAndSetsScoreHotDice);
+    runTest("straightAndThreePairsScoreHotDice", straightAndThreePairsScoreHotDice);
     runTest("multiplesScoreScaleAndCanBeExtended", multiplesScoreScaleAndCanBeExtended);
     runTest("fourOnesDoubleBaseMultipleAndHotDice", fourOnesDoubleBaseMultipleAndHotDice);
     runTest("ruleManagerExposesStructuredGameOptions", ruleManagerExposesStructuredGameOptions);
@@ -804,7 +911,7 @@ int main()
     runTest("disabledBustBonusBustsImmediately", disabledBustBonusBustsImmediately);
     runTest("nonBustHandsDoNotTriggerBustHandling", nonBustHandsDoNotTriggerBustHandling);
     runTest("emptyDiceAfterScoringResetsToHotDice", emptyDiceAfterScoringResetsToHotDice);
-    runTest("bankingRequiresRollSelectionScoreAndThreshold", bankingRequiresRollSelectionScoreAndThreshold);
+    runTest("bankingRequiresRollSelectionScoreAndOpeningScore", bankingRequiresRollSelectionScoreAndOpeningScore);
     runTest("endTurnAndBankMovesRoundScoreOnlyWhenAllowed", endTurnAndBankMovesRoundScoreOnlyWhenAllowed);
     runTest("disabledStealingNeverCreatesOffer", disabledStealingNeverCreatesOffer);
     runTest("stealingCopiesBankedContinuationAndChains", stealingCopiesBankedContinuationAndChains);
@@ -814,7 +921,7 @@ int main()
     runTest("finalRoundRequiresBeatingLeaderWhenTiesDisabled", finalRoundRequiresBeatingLeaderWhenTiesDisabled);
     runTest("turnOrderFinalRoundAndResetStateWrapSafely", turnOrderFinalRoundAndResetStateWrapSafely);
     runTest("selectionAndSavedMultipleStateResetCorrectly", selectionAndSavedMultipleStateResetCorrectly);
-    runTest("ruleConfigTogglesAndThresholdsAreStable", ruleConfigTogglesAndThresholdsAreStable);
+    runTest("ruleConfigTogglesAndOpeningScoreAreStable", ruleConfigTogglesAndOpeningScoreAreStable);
     runTest("winnerLookupHandlesEmptyAndHighestScore", winnerLookupHandlesEmptyAndHighestScore);
     runTest("resourcePathLeavesAbsoluteAndMissingRelativePathsStable", resourcePathLeavesAbsoluteAndMissingRelativePathsStable);
     runTest("emptyPlayerResetIsSafe", emptyPlayerResetIsSafe);

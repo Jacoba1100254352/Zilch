@@ -28,13 +28,13 @@ std::map<uint16_t, uint16_t> fullDiceSet(const Dice& dice)
     return dice.diceSetMap;
 }
 
-class StraitRule final : public IRule {
+class StraightRule final : public IRule {
 public:
-    [[nodiscard]] RuleType type() const override { return RuleType::Strait; }
+    [[nodiscard]] RuleType type() const override { return RuleType::Straight; }
 
     [[nodiscard]] std::vector<GameOption> evaluate(const RuleContext& context) const override
     {
-        if (!context.config.straitsEnabled())
+        if (!context.config.straightEnabled())
             return {};
 
         uint16_t expected = 0;
@@ -48,17 +48,17 @@ public:
         if (!isStrait)
             return {};
 
-        return {{RuleType::Strait, "Apply strait (1000)", 0, 1000, 0, fullDiceSet(context.dice)}};
+        return {{RuleType::Straight, "Apply Straight (1000)", 0, 1000, 0, fullDiceSet(context.dice)}};
     }
 };
 
-class SetRule final : public IRule {
+class ThreePairsRule final : public IRule {
 public:
-    [[nodiscard]] RuleType type() const override { return RuleType::Set; }
+    [[nodiscard]] RuleType type() const override { return RuleType::ThreePairs; }
 
     [[nodiscard]] std::vector<GameOption> evaluate(const RuleContext& context) const override
     {
-        if (!context.config.setsEnabled())
+        if (!context.config.threePairsEnabled())
             return {};
 
         const bool isSet = context.dice.diceSetMap.size() == 3 && std::ranges::all_of(
@@ -69,7 +69,7 @@ public:
         if (!isSet)
             return {};
 
-        return {{RuleType::Set, "Apply set (3 pairs)", 0, 1000, 0, fullDiceSet(context.dice)}};
+        return {{RuleType::ThreePairs, "Apply Three Pairs (1000)", 0, 1000, 0, fullDiceSet(context.dice)}};
     }
 };
 
@@ -202,8 +202,8 @@ void consumeDice(GameManager& game, const GameOption& option)
 RuleManager::RuleManager(const RuleConfig& config)
     : config(config)
 {
-    rules.push_back(std::make_unique<StraitRule>());
-    rules.push_back(std::make_unique<SetRule>());
+    rules.push_back(std::make_unique<StraightRule>());
+    rules.push_back(std::make_unique<ThreePairsRule>());
     rules.push_back(std::make_unique<MultipleRule>());
     rules.push_back(std::make_unique<AddMultipleRule>());
     rules.push_back(std::make_unique<SingleRule>());
@@ -242,8 +242,8 @@ void RuleManager::apply(GameManager& game, const GameOption& option) const
 
     Score& score = player->getScore();
     switch (option.ruleType) {
-        case RuleType::Strait:
-        case RuleType::Set:
+        case RuleType::Straight:
+        case RuleType::ThreePairs:
         case RuleType::Single:
             score.increaseRoundScore(option.pointsAwarded);
             break;

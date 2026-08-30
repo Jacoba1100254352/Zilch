@@ -23,22 +23,32 @@ class RuleConfig {
 public:
 	RuleConfig()
 		: enableStraits(true), enableSets(true), enableMultiples(true), enableSingles(true),
-		  enableAnimations(true), bankThreshold(1000), enableFirstRollBustBonus(true),
-		  enableFinalChase(true), allowTies(false), enableStealing(false) {}
+		  enableAnimations(true), openingScoreLimit(1000), enableFirstRollBustBonus(true),
+		  enableFinalChase(true), allowTies(true), enableStealing(false) {}
 
-	[[nodiscard]] bool straitsEnabled() const { return enableStraits; }
-	[[nodiscard]] bool setsEnabled() const { return enableSets; }
+	[[nodiscard]] bool straightEnabled() const { return enableStraits; }
+	[[nodiscard]] bool straitsEnabled() const { return straightEnabled(); }
+	[[nodiscard]] bool threePairsEnabled() const { return enableSets; }
+	[[nodiscard]] bool setsEnabled() const { return threePairsEnabled(); }
 	[[nodiscard]] bool multiplesEnabled() const { return enableMultiples; }
 	[[nodiscard]] bool singlesEnabled() const { return enableSingles; }
-	[[nodiscard]] uint32_t getBankThreshold() const { return bankThreshold; }
+	[[nodiscard]] uint32_t getOpeningScoreLimit() const { return openingScoreLimit; }
+	[[nodiscard]] uint32_t getOpeningScore() const { return getOpeningScoreLimit(); }
+	// Compatibility alias retained for callers using the former terminology.
+	[[nodiscard]] uint32_t getBankThreshold() const { return getOpeningScoreLimit(); }
 	[[nodiscard]] bool animationsEnabled() const { return enableAnimations; }
 	[[nodiscard]] bool firstRollBustBonusEnabled() const { return enableFirstRollBustBonus; }
 	[[nodiscard]] bool finalChaseEnabled() const { return enableFinalChase; }
 	[[nodiscard]] bool tiesAllowed() const { return allowTies; }
 	[[nodiscard]] bool stealingEnabled() const { return enableStealing; }
+	[[nodiscard]] bool hasScoringRuleEnabled() const {
+		return enableStraits || enableSets || enableMultiples || enableSingles;
+	}
 
-	void toggleStraits() { enableStraits = !enableStraits; }
-	void toggleSets() { enableSets = !enableSets; }
+	void toggleStraight() { enableStraits = !enableStraits; }
+	void toggleStraits() { toggleStraight(); }
+	void toggleThreePairs() { enableSets = !enableSets; }
+	void toggleSets() { toggleThreePairs(); }
 	void toggleMultiples() { enableMultiples = !enableMultiples; }
 	void toggleSingles() { enableSingles = !enableSingles; }
 	void toggleAnimations() { enableAnimations = !enableAnimations; }
@@ -46,16 +56,28 @@ public:
 	void toggleFinalChase() { enableFinalChase = !enableFinalChase; }
 	void toggleAllowTies() { allowTies = !allowTies; }
 	void toggleStealing() { enableStealing = !enableStealing; }
-	void adjustBankThreshold(const int32_t delta) {
-		const int64_t updated = static_cast<int64_t>(bankThreshold) + delta;
-		bankThreshold = static_cast<uint32_t>(updated < 0 ? 0 : updated);
+	void adjustOpeningScoreLimit(const int32_t delta) {
+		const int64_t updated = static_cast<int64_t>(openingScoreLimit) + delta;
+		openingScoreLimit = static_cast<uint32_t>(updated < 0 ? 0 : updated);
 	}
+	void clampOpeningScoreLimitTo(const uint32_t winningScore) {
+		if (openingScoreLimit > winningScore)
+			openingScoreLimit = winningScore;
+	}
+	void adjustOpeningScore(const int32_t delta) { adjustOpeningScoreLimit(delta); }
+	// Compatibility alias retained for callers using the former terminology.
+	void adjustBankThreshold(const int32_t delta) { adjustOpeningScoreLimit(delta); }
 
-	void setStraitsEnabled(const bool enabled) { enableStraits = enabled; }
-	void setSetsEnabled(const bool enabled) { enableSets = enabled; }
+	void setStraightEnabled(const bool enabled) { enableStraits = enabled; }
+	void setStraitsEnabled(const bool enabled) { setStraightEnabled(enabled); }
+	void setThreePairsEnabled(const bool enabled) { enableSets = enabled; }
+	void setSetsEnabled(const bool enabled) { setThreePairsEnabled(enabled); }
 	void setMultiplesEnabled(const bool enabled) { enableMultiples = enabled; }
 	void setSinglesEnabled(const bool enabled) { enableSingles = enabled; }
-	void setBankThreshold(const uint32_t threshold) { bankThreshold = threshold; }
+	void setOpeningScoreLimit(const uint32_t score) { openingScoreLimit = score; }
+	void setOpeningScore(const uint32_t score) { setOpeningScoreLimit(score); }
+	// Compatibility alias retained for callers using the former terminology.
+	void setBankThreshold(const uint32_t threshold) { setOpeningScoreLimit(threshold); }
 	void setFirstRollBustBonusEnabled(const bool enabled) { enableFirstRollBustBonus = enabled; }
 	void setFinalChaseEnabled(const bool enabled) { enableFinalChase = enabled; }
 	void setAllowTies(const bool enabled) { allowTies = enabled; }
@@ -67,7 +89,7 @@ private:
 	bool enableMultiples;
 	bool enableSingles;
 	bool enableAnimations;
-	uint32_t bankThreshold;
+	uint32_t openingScoreLimit;
 	bool enableFirstRollBustBonus;
 	bool enableFinalChase;
 	bool allowTies;

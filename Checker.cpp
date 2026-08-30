@@ -77,14 +77,14 @@ void Checker::handleBusts() const
     }
 }
 
-bool Checker::isStrait() const
+bool Checker::isStraight() const
 {
-    return makeRuleManager(game).hasOption(game, zilch::rules::RuleType::Strait);
+    return makeRuleManager(game).hasOption(game, zilch::rules::RuleType::Straight);
 }
 
-bool Checker::isSet() const
+bool Checker::isThreePairs() const
 {
-    return makeRuleManager(game).hasOption(game, zilch::rules::RuleType::Set);
+    return makeRuleManager(game).hasOption(game, zilch::rules::RuleType::ThreePairs);
 }
 
 bool Checker::isMultiple() const

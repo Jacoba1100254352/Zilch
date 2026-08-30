@@ -42,8 +42,10 @@ public:
 	void handleBusts() const;
 
 	// Individual option checks.
-	[[nodiscard]] bool isStrait() const;
-	[[nodiscard]] bool isSet() const;
+	[[nodiscard]] bool isStraight() const;
+	[[nodiscard]] bool isStrait() const { return isStraight(); }
+	[[nodiscard]] bool isThreePairs() const;
+	[[nodiscard]] bool isSet() const { return isThreePairs(); }
 	[[nodiscard]] bool isMultiple() const;
 	[[nodiscard]] bool isDesiredMultipleAvailable(uint16_t desiredMultiple) const;
 	[[nodiscard]] bool canAddMultiples() const;

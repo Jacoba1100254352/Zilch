@@ -8,8 +8,10 @@
 namespace zilch::rules {
 
 enum class RuleType {
-    Strait,
-    Set,
+    Straight,
+    Strait = Straight,
+    ThreePairs,
+    Set = ThreePairs,
     Multiple,
     AddMultiple,
     Single

@@ -11,6 +11,7 @@ This file contains the implementation of the GameManager class, which manages th
 #include "GameManager.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 /**
  * @brief Initializes the roll cycle by resetting relevant statuses and scores.
@@ -101,6 +102,7 @@ void GameManager::setPlayers(const std::vector<std::string>& playerNames)
  */
 void GameManager::setScoreLimit(const uint32_t limit)
 {
+    ruleConfig.clampOpeningScoreLimitTo(limit);
     for (Player& player : players)
         player.getScore().setScoreLimit(limit);
 }
@@ -114,6 +116,8 @@ void GameManager::startTurn(const size_t playerIndex)
 {
     // Ensure there are players to start a turn.
     if (players.empty()) return;
+    if (!ruleConfig.hasScoringRuleEnabled())
+        throw std::logic_error("At least one scoring rule must be enabled before starting a turn.");
 
     // Set current player based on index.
     currentIndex = playerIndex % players.size();
@@ -246,7 +250,7 @@ bool GameManager::canBankCurrentScore() const
     if (score.getRoundScore() == 0)
         return false;
 
-    return score.getPermanentScore() + score.getRoundScore() >= ruleConfig.getBankThreshold();
+    return score.getPermanentScore() + score.getRoundScore() >= ruleConfig.getOpeningScoreLimit();
 }
 
 /**
@@ -260,13 +264,13 @@ bool GameManager::hasStealOfferForCurrentPlayer() const
 /**
  * @brief Checks whether the current player may accept a steal offer.
  *
- * A player must already be on the board at the configured bank threshold. This
+ * A player must already be on the board at the configured Opening Score. This
  * prevents inherited points from being used to reach the player's first bank.
  */
 bool GameManager::canCurrentPlayerSteal() const
 {
     return ruleConfig.stealingEnabled() && hasStealOfferForCurrentPlayer() &&
-           currentPlayer->getScore().getPermanentScore() >= ruleConfig.getBankThreshold();
+           currentPlayer->getScore().getPermanentScore() >= ruleConfig.getOpeningScoreLimit();
 }
 
 uint16_t GameManager::getStealOfferDiceCount() const

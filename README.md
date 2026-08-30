@@ -3,9 +3,9 @@ This branch is the SFML/OpenGL visual interface version of Zilch.
 
 The audited CLI version is preserved on the `zilch-cli` branch.
 
-The `dev/architecture/zilch-basic-structure` branch keeps the SFML surface but
-pulls the rule/option layer toward the Java `Zilch Basic` structure: `Checker`
-is now an adapter over `RuleManager`, `IRule`, `RuleContext`, and `GameOption`.
+The current implementation keeps the SFML surface while aligning its rule and
+option layer with the other Zilch projects: `Checker` is an adapter over
+`RuleManager`, `IRule`, `RuleContext`, and `GameOption`.
 
 Prerequisites on macOS:
 - `brew install sfml@2 libomp`
@@ -18,7 +18,27 @@ Build and run:
 Or use:
 - `make`
 
-Architecture:
+## Shared gameplay baseline
+
+- Two players and a winning score of 5000.
+- Opening Score of 1000.
+- Straight, Three Pairs, Multiples and extensions, and Singles enabled.
+- One 50-point First-Roll Bust recovery enabled.
+- Final Chase and Allow Ties enabled.
+- Stealing disabled.
+
+At least one scoring rule must remain enabled before a game can start. The
+legacy Bank Threshold API remains available as a compatibility alias for
+Opening Score. Opening Score is always capped at the configured Winning Score.
+
+## Intentional C++ differences
+
+This edition remains the local human pass-and-play, SFML/OpenGL presentation of
+Zilch. It supports one to six named players, animated visual dice, and an
+animation toggle. Computer strategies and large simulation runs belong to the
+computer-focused project rather than this GUI.
+
+## Architecture
 
 ```mermaid
 stateDiagram-v2
@@ -42,7 +62,7 @@ stateDiagram-v2
         Rolled --> BustPending: no options otherwise
         AwaitingSelection --> WaitingForRoll: score option and dice remain
         AwaitingSelection --> WaitingForRoll: hot dice after all dice score
-        AwaitingSelection --> CanBank: threshold met
+        AwaitingSelection --> CanBank: Opening Score met
         CanBank --> WaitingForRoll: Roll Again
         CanBank --> Banked: Bank Score
         BustPending --> Banked: Pass Dice
@@ -90,6 +110,8 @@ classDiagram
         +describe()
     }
     class RuleConfig {
+        +getOpeningScoreLimit()
+        +hasScoringRuleEnabled()
         +firstRollBustBonusEnabled()
         +toggleFirstRollBustBonus()
         +finalChaseEnabled()
@@ -125,8 +147,8 @@ classDiagram
         +pointsAwarded
         +consumedDice
     }
-    class StraitRule
-    class SetRule
+    class StraightRule
+    class ThreePairsRule
     class MultipleRule
     class AddMultipleRule
     class SingleRule
@@ -171,8 +193,8 @@ classDiagram
     RuleManager --> RuleContext : builds
     RuleManager --> GameOption : returns/applies
     RuleManager *-- IRule
-    IRule <|.. StraitRule
-    IRule <|.. SetRule
+    IRule <|.. StraightRule
+    IRule <|.. ThreePairsRule
     IRule <|.. MultipleRule
     IRule <|.. AddMultipleRule
     IRule <|.. SingleRule
@@ -192,7 +214,7 @@ First-roll bust behavior:
 Stealing behavior:
 - Stealing is an optional setup toggle and is disabled by default.
 - When a player banks with one to five dice unrolled, the immediately following player may roll those dice and copy the completed round score as the start of a continuation. The prior player keeps the score they banked.
-- The offer is available only to a player whose permanent score already meets the configured bank threshold, so stealing cannot put a player on the board.
+- The offer is available only to a player whose permanent score already meets the configured Opening Score, so stealing cannot put a player on the board.
 - A successful continuation can be banked and offered again with its larger carried score. Choosing a fresh six-die roll, busting, or scoring all available dice ends the chain.
 - A bust during a steal loses the carried score and is not rescued by the optional first-roll bust bonus.
 
