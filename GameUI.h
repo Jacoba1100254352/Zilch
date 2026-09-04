@@ -14,6 +14,7 @@ various game screens such as the intro, setup, player turns, and game over.
 #define ZILCH_GAME_UI_H
 
 #include "DiceRenderer.h"
+#include "Player.h"
 
 #include <functional>
 #include <string>
@@ -58,6 +59,8 @@ private:
     bool editingBankThreshold{false};
     std::string scoreLimitBuffer;
     std::string bankThresholdBuffer;
+    sf::Clock computerActionClock;
+    std::string computerActionKey;
 
 	// Typography constants
     static sf::Color defaultButtonColor();
@@ -66,7 +69,7 @@ private:
 	// Rendering methods for different game states
     void renderIntro(
         GameManager& game,
-        std::vector<std::string>& playerNames,
+        std::vector<PlayerSetup>& playerSetups,
         uint32_t& scoreLimit,
         bool& waitingForRoll,
         bool& awaitingSelection,
@@ -74,11 +77,11 @@ private:
         const std::vector<sf::Event>& events
     );
     void renderRules(GameManager& game, const std::vector<sf::Event>& events);
-	void renderSetup(
-        GameManager& game, std::vector<std::string>& playerNames, uint32_t& scoreLimit,
+    void renderSetup(
+        GameManager& game, std::vector<PlayerSetup>& playerSetups, uint32_t& scoreLimit,
         const std::vector<sf::Event>& events
     );
-	void renderTurn(
+    void renderTurn(
         GameManager& game, const DiceRenderer& diceRenderer, const Checker& checker, std::vector<Button>& optionButtons,
         bool& waitingForRoll, bool& awaitingSelection, const std::vector<sf::Event>& events
     );
@@ -96,6 +99,7 @@ private:
         sf::Color color = defaultButtonColor(),
         sf::Color textColor = defaultButtonTextColor()
     );
+    bool computerActionReady(const std::string& actionKey);
 };
 
 #endif // ZILCH_GAME_UI_H

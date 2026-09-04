@@ -66,15 +66,29 @@ void GameManager::manageDiceCount(uint16_t numOfDice)
  */
 void GameManager::setPlayers(const std::vector<std::string>& playerNames)
 {
+    std::vector<PlayerSetup> playerSetups;
+    playerSetups.reserve(playerNames.size());
+    for (const auto& name : playerNames)
+        playerSetups.push_back({name, PlayerKind::Human, ComputerDifficulty::Medium});
+    setPlayerSetups(playerSetups);
+}
+
+/**
+ * @brief Sets human and computer players from the setup screen.
+ *
+ * @param playerSetups The configured names, player kinds, and computer levels.
+ */
+void GameManager::setPlayerSetups(const std::vector<PlayerSetup>& playerSetups)
+{
     endStealChain();
 
     // Clear existing players and reserve space.
     players.clear();
-    players.reserve(playerNames.size());
+    players.reserve(playerSetups.size());
 
-    // Create players from provided names.
-    for (const auto& name : playerNames)
-        players.emplace_back(name);
+    // Create players from provided setup records.
+    for (const auto& setup : playerSetups)
+        players.emplace_back(setup);
 
     // Set the first player as the current player.
     resetFinalRoundState();

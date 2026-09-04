@@ -31,12 +31,43 @@ At least one scoring rule must remain enabled before a game can start. The
 legacy Bank Threshold API remains available as a compatibility alias for
 Opening Score. Opening Score is always capped at the configured Winning Score.
 
-## Intentional C++ differences
+## Players and computer levels
 
-This edition remains the local human pass-and-play, SFML/OpenGL presentation of
-Zilch. It supports one to six named players, animated visual dice, and an
-animation toggle. Computer strategies and large simulation runs belong to the
-computer-focused project rather than this GUI.
+This edition remains the native SFML/OpenGL presentation of Zilch. It supports
+one to six named player slots, and every slot remains Human by default for the
+original pass-and-play experience. On the Setup screen, click a player's
+controller label to cycle through Human, Easy, Medium, Hard, and back to Human.
+Computer actions are paced and wait for the existing dice animation rather than
+skipping the visual turn.
+
+- Easy scores every available scoring die, banks at about 600 round points once
+  banking is legal, and always banks a reachable winning score.
+- Medium also clears the available scoring dice, then adjusts its risk near the
+  finish. It seeks a buffer when a close opponent will receive a Final Chase,
+  may bank just short of the Winning Score when it already has a safe lead, and
+  keeps rolling when it still needs to catch the Final Chase leader.
+- Hard chooses scoring combinations and bank timing with the trained utility
+  policy from Computers vs Zilch. When Stealing is enabled it switches the
+  complete policy, including steal acceptance, rather than reusing the standard
+  game's dice values.
+
+The embedded standard Hard policy uses bank thresholds of
+`200, 1021, 1128, 1506, 2130, 2130` for one through six dice. Its utility values
+are score `1.0045`, remaining dice `36.0805`, hot dice `354.561`, multiple
+`91.9329`, lead `0`, trail `0.293194`, closing `0.193316`, and roll bias
+`136.066`. In a 500,000-game mirrored holdout (seed `2026091101`), this policy
+earned 58.5621% of match points against the baseline policy.
+
+The Stealing Hard policy uses thresholds
+`313, 313, 1106, 1360, 1360, 1376` and utility values score `0.88553`, remaining
+dice `91.2663`, hot dice `229.628`, multiple `94.2546`, lead `0`, trail
+`0.187935`, closing `0.20764`, and roll bias `-26.2974`. Its practical minimum
+steal offers are about 550, 450, 350, 250, and 150 points with one through five
+dice left. In a 500,000-game holdout (seed `2026091102`), it earned 52.053% of
+match points against the baseline policy. The same policy earned 51.706% with
+Three Pairs disabled in a separate 500,000-game holdout (seed `2026091104`).
+These are play policies only; large training and arena runs remain in the
+computer-focused project.
 
 ## Architecture
 
@@ -103,6 +134,14 @@ classDiagram
         +declineStealOffer()
         +startFinalRound()
     }
+    class ComputerStrategy {
+        +policyForDifficulty(level, stealing)
+        +chooseOption(game, options)
+        +decideAfterSelection(game, options)
+        +chooseTurnAction(game, state, options)
+        +shouldBank(game)
+        +shouldAcceptSteal(game)
+    }
     class GameStateMachine {
         -State current
         +getState()
@@ -156,6 +195,8 @@ classDiagram
         -Dice dice
         -Score score
         -string name
+        -PlayerKind kind
+        -ComputerDifficulty difficulty
     }
     class Dice {
         +diceSetMap
@@ -180,6 +221,7 @@ classDiagram
     }
 
     GameUI --> GameManager : drives state
+    GameUI --> ComputerStrategy : schedules computer actions
     GameUI --> Checker : displays options
     GameUI --> DiceRenderer : renders dice
     GameUI ..> ResourcePath : loads font
@@ -188,6 +230,8 @@ classDiagram
     GameManager "1" *-- "1..6" Player : players
     Player *-- Dice
     Player *-- Score
+    ComputerStrategy --> RuleManager : evaluates structured options
+    ComputerStrategy --> Player : reads level and scores
     Checker --> GameManager : current turn adapter
     Checker --> RuleManager : evaluates/applies options
     RuleManager --> RuleContext : builds
@@ -222,4 +266,4 @@ Run tests:
 - `ctest --test-dir build --output-on-failure`
 - `make test`
 
-The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking and stealing gates, steal chaining and termination, final-round and winner state, state-machine descriptions, and resource path resolution.
+The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking and stealing gates, steal chaining and termination, final-round and winner state, state-machine descriptions, resource path resolution, mixed human/computer setup, exact policy constants and threshold rounding, scoring selection, computer action planning, opponent-aware finish decisions, and Stealing-specific acceptance thresholds.

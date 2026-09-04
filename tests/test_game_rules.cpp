@@ -1,4 +1,5 @@
 #include "Checker.h"
+#include "ComputerStrategy.h"
 #include "Dice.h"
 #include "GameManager.h"
 #include "GameStateMachine.h"
@@ -7,6 +8,7 @@
 #include "Score.h"
 #include "rules/RuleManager.h"
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -59,6 +61,41 @@ void prepareTurn(GameManager& game, const std::vector<std::string>& players)
     game.setPlayers(players);
     game.setScoreLimit(5000);
     game.startTurn(0);
+}
+
+void prepareComputerTurn(GameManager& game, const ComputerDifficulty difficulty)
+{
+    game.setPlayerSetups({
+        {"Computer", PlayerKind::Computer, difficulty},
+        {"Opponent", PlayerKind::Human, ComputerDifficulty::Medium}
+    });
+    game.setScoreLimit(5000);
+    game.startTurn(0);
+}
+
+void prepareStealDecision(
+    GameManager& game,
+    const std::uint32_t inheritedScore,
+    const std::uint16_t diceCount,
+    const ComputerDifficulty difficulty)
+{
+    game.setPlayerSetups({
+        {"Offerer", PlayerKind::Human, ComputerDifficulty::Medium},
+        {"Computer", PlayerKind::Computer, difficulty}
+    });
+    game.setScoreLimit(5000);
+    game.accessRuleConfig().setStealingEnabled(true);
+    game.startTurn(0);
+    game.accessPlayers()[0].getScore().increasePermanentScore(1000);
+    game.accessPlayers()[1].getScore().increasePermanentScore(1000);
+
+    game.getCurrentPlayer()->getScore().increaseRoundScore(inheritedScore);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(diceCount);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.endTurnAndBank();
+    game.switchToNextPlayer();
+    game.startTurn(game.getCurrentIndex());
 }
 
 Dice& setDice(GameManager& game, const std::initializer_list<std::pair<uint16_t, uint16_t>> values)
@@ -140,6 +177,322 @@ void scoreAndPlayerDefaultsAreStable()
     expectEqual(player.getName(), std::string("Alice"), "player should retain its configured name");
     expectEqual(player.getDice().getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "new players should start with a full dice set");
     expectEqual(player.getScore().getPermanentScore(), static_cast<uint32_t>(0), "new players should start unscored");
+}
+
+void mixedHumanAndComputerPlayerSetupIsPreserved()
+{
+    GameManager game;
+    game.setPlayerSetups({
+        {"Alice", PlayerKind::Human, ComputerDifficulty::Medium},
+        {"Easy CPU", PlayerKind::Computer, ComputerDifficulty::Easy},
+        {"Hard CPU", PlayerKind::Computer, ComputerDifficulty::Hard}
+    });
+
+    expectEqual(game.getPlayers().size(), static_cast<std::size_t>(3), "mixed setup should preserve every player slot");
+    expect(!game.getPlayers()[0].isComputer(), "human setup should remain human");
+    expect(game.getPlayers()[1].isComputer(), "computer setup should remain a computer");
+    expect(game.getPlayers()[1].getComputerDifficulty() == ComputerDifficulty::Easy, "easy level should be retained");
+    expect(game.getPlayers()[2].getComputerDifficulty() == ComputerDifficulty::Hard, "hard level should be retained");
+
+    game.setPlayers({"One", "Two", "Three", "Four", "Five", "Six"});
+    expectEqual(game.getPlayers().size(), static_cast<std::size_t>(6), "legacy setup should still support six players");
+    for (const Player& player : game.getPlayers())
+        expect(!player.isComputer(), "legacy name-only setup should continue creating human players");
+}
+
+void computerPoliciesMatchTheTestedProfiles()
+{
+    using zilch::computer::policyForDifficulty;
+
+    const auto& easy = policyForDifficulty(ComputerDifficulty::Easy, false);
+    expect(easy.bankThresholdByDice == std::array<int, 7>{0, 600, 600, 600, 600, 600, 600},
+           "easy should use a fixed 600-point banking target");
+
+    const auto& hard = policyForDifficulty(ComputerDifficulty::Hard, false);
+    expect(hard.bankThresholdByDice == std::array<int, 7>{0, 200, 1021, 1128, 1506, 2130, 2130},
+           "standard hard thresholds should match the simulator champion");
+    expectEqual(hard.scoreWeight, 1.0045, "standard hard score weight should match the trained policy");
+    expectEqual(hard.remainingDiceWeight, 36.0805, "standard hard dice weight should match the trained policy");
+    expectEqual(hard.hotDiceWeight, 354.561, "standard hard hot-dice weight should match the trained policy");
+    expectEqual(hard.multipleWeight, 91.9329, "standard hard multiple weight should match the trained policy");
+    expectEqual(hard.leadFactor, 0.0, "standard hard lead factor should match the trained policy");
+    expectEqual(hard.trailFactor, 0.293194, "standard hard trail factor should match the trained policy");
+    expectEqual(hard.closingFactor, 0.193316, "standard hard closing factor should match the trained policy");
+    expectEqual(hard.rollBias, 136.066, "standard hard roll bias should match the trained policy");
+
+    const auto& stealing = policyForDifficulty(ComputerDifficulty::Hard, true);
+    expect(stealing.bankThresholdByDice == std::array<int, 7>{0, 313, 313, 1106, 1360, 1360, 1376},
+           "Stealing hard thresholds should use the separately trained policy");
+    expectEqual(stealing.scoreWeight, 0.88553, "Stealing hard score weight should match the trained policy");
+    expectEqual(stealing.remainingDiceWeight, 91.2663, "Stealing hard dice weight should match the trained policy");
+    expectEqual(stealing.hotDiceWeight, 229.628, "Stealing hard hot-dice weight should match the trained policy");
+    expectEqual(stealing.multipleWeight, 94.2546, "Stealing hard multiple weight should match the trained policy");
+    expectEqual(stealing.leadFactor, 0.0, "Stealing hard lead factor should match the trained policy");
+    expectEqual(stealing.trailFactor, 0.187935, "Stealing hard trail factor should match the trained policy");
+    expectEqual(stealing.closingFactor, 0.20764, "Stealing hard closing factor should match the trained policy");
+    expectEqual(stealing.rollBias, -26.2974, "Stealing hard roll bias should match the trained policy");
+}
+
+void easyScoresEveryAvailableDieBeforeRolling()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Easy);
+    game.registerRoll();
+    setDice(game, {{1, 1}, {2, 1}, {5, 2}});
+    zilch::rules::RuleManager rules(game.getRuleConfig());
+
+    std::size_t selected = 0;
+    while (true) {
+        const auto options = rules.evaluate(game);
+        if (options.empty())
+            break;
+        const std::size_t index = zilch::computer::chooseOption(game, options);
+        rules.apply(game, options[index]);
+        ++selected;
+
+        const auto remaining = rules.evaluate(game);
+        if (remaining.empty())
+            break;
+        expect(zilch::computer::decideAfterSelection(game, remaining) ==
+               zilch::computer::PostSelectionDecision::SelectAgain,
+               "easy should keep selecting while any scoring die remains");
+    }
+
+    expectEqual(selected, static_cast<std::size_t>(3), "easy should select the one and both fives");
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), static_cast<uint32_t>(200),
+                "easy should collect every available single score");
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), static_cast<uint16_t>(1),
+                "only the non-scoring die should remain after easy auto-selection");
+}
+
+void easyBanksAtItsFixedThreshold()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Easy);
+    game.getCurrentPlayer()->getScore().increasePermanentScore(1000);
+    game.getCurrentPlayer()->getScore().increaseRoundScore(550);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(2);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+
+    expect(!zilch::computer::shouldBank(game), "easy should keep rolling below 600 round points");
+    game.getCurrentPlayer()->getScore().increaseRoundScore(50);
+    expect(zilch::computer::shouldBank(game), "easy should bank once its round reaches 600 points");
+}
+
+void hardCanPreserveAWeakScoringDieForTheReroll()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.accessRuleConfig().setStraightEnabled(false);
+    game.registerRoll();
+    setDice(game, {{1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}});
+    zilch::rules::RuleManager rules(game.getRuleConfig());
+
+    auto options = rules.evaluate(game);
+    const std::size_t firstChoice = zilch::computer::chooseOption(game, options);
+    expectEqual(options[firstChoice].selectedValue, static_cast<uint16_t>(1),
+                "hard should prefer the stronger single one first");
+    rules.apply(game, options[firstChoice]);
+
+    options = rules.evaluate(game);
+    expectEqual(options.size(), static_cast<std::size_t>(1), "only the weak single five should remain");
+    expect(zilch::computer::decideAfterSelection(game, options) == zilch::computer::PostSelectionDecision::Roll,
+           "hard should reroll five dice instead of consuming a weak final scoring option");
+}
+
+void hardSwitchesTheWholePolicyForStealing()
+{
+    GameManager scoringGame;
+    prepareComputerTurn(scoringGame, ComputerDifficulty::Hard);
+    scoringGame.registerRoll();
+    scoringGame.setSelectedOptionStatus(true);
+    setDice(scoringGame, {{1, 1}, {2, 1}, {3, 1}, {4, 1}, {6, 1}});
+    zilch::rules::RuleManager standardRules(scoringGame.getRuleConfig());
+    const auto remainingOptions = standardRules.evaluate(scoringGame);
+    expect(zilch::computer::decideAfterSelection(scoringGame, remainingOptions) ==
+           zilch::computer::PostSelectionDecision::Roll,
+           "standard hard should reroll rather than consume the remaining one");
+
+    scoringGame.accessRuleConfig().setStealingEnabled(true);
+    expect(zilch::computer::decideAfterSelection(scoringGame, remainingOptions) ==
+           zilch::computer::PostSelectionDecision::SelectAgain,
+           "Stealing hard should use its different utility weights for scoring choices");
+
+    GameManager standardBankGame;
+    prepareComputerTurn(standardBankGame, ComputerDifficulty::Hard);
+    standardBankGame.getCurrentPlayer()->getScore().increasePermanentScore(1000);
+    standardBankGame.accessPlayers()[1].getScore().increasePermanentScore(1000);
+    standardBankGame.getCurrentPlayer()->getScore().increaseRoundScore(1400);
+    standardBankGame.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    standardBankGame.registerRoll();
+    standardBankGame.setSelectedOptionStatus(true);
+    expect(!zilch::computer::shouldBank(standardBankGame),
+           "standard hard should keep rolling below its four-dice threshold");
+
+    GameManager stealingBankGame;
+    prepareComputerTurn(stealingBankGame, ComputerDifficulty::Hard);
+    stealingBankGame.accessRuleConfig().setStealingEnabled(true);
+    stealingBankGame.getCurrentPlayer()->getScore().increasePermanentScore(1000);
+    stealingBankGame.accessPlayers()[1].getScore().increasePermanentScore(1000);
+    stealingBankGame.getCurrentPlayer()->getScore().increaseRoundScore(1400);
+    stealingBankGame.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    stealingBankGame.registerRoll();
+    stealingBankGame.setSelectedOptionStatus(true);
+    expect(zilch::computer::shouldBank(stealingBankGame),
+           "Stealing hard should bank at its lower four-dice threshold");
+}
+
+void hardBankThresholdMatchesSimulatorRounding()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.accessPlayers()[1].getScore().increasePermanentScore(2900);
+    game.getCurrentPlayer()->getScore().increaseRoundScore(1049);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(1);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+
+    expect(!zilch::computer::shouldBank(game),
+           "hard should keep rolling one point below the simulator's truncated threshold");
+    game.getCurrentPlayer()->getScore().increaseRoundScore(1);
+    expect(zilch::computer::shouldBank(game),
+           "hard should bank exactly at the simulator's integer-adjusted threshold");
+}
+
+void mediumUsesOpponentAwareFinishDecisions()
+{
+    GameManager bufferGame;
+    prepareComputerTurn(bufferGame, ComputerDifficulty::Medium);
+    bufferGame.getCurrentPlayer()->getScore().increasePermanentScore(4900);
+    bufferGame.accessPlayers()[1].getScore().increasePermanentScore(4700);
+    bufferGame.getCurrentPlayer()->getScore().increaseRoundScore(100);
+    bufferGame.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    bufferGame.registerRoll();
+    bufferGame.setSelectedOptionStatus(true);
+    expect(!zilch::computer::shouldBank(bufferGame),
+           "medium should press for a buffer when a close opponent would receive a final chase");
+
+    GameManager saferDiceGame;
+    prepareComputerTurn(saferDiceGame, ComputerDifficulty::Medium);
+    saferDiceGame.getCurrentPlayer()->getScore().increasePermanentScore(4900);
+    saferDiceGame.accessPlayers()[1].getScore().increasePermanentScore(4700);
+    saferDiceGame.getCurrentPlayer()->getScore().increaseRoundScore(100);
+    saferDiceGame.getCurrentPlayer()->getDice().setNumDiceInPlay(3);
+    saferDiceGame.registerRoll();
+    saferDiceGame.setSelectedOptionStatus(true);
+    expect(zilch::computer::shouldBank(saferDiceGame),
+           "medium should take the win rather than chase a buffer with only three dice");
+
+    GameManager stopShortGame;
+    prepareComputerTurn(stopShortGame, ComputerDifficulty::Medium);
+    stopShortGame.getCurrentPlayer()->getScore().increasePermanentScore(4500);
+    stopShortGame.accessPlayers()[1].getScore().increasePermanentScore(4400);
+    stopShortGame.getCurrentPlayer()->getScore().increaseRoundScore(450);
+    stopShortGame.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    stopShortGame.registerRoll();
+    stopShortGame.setSelectedOptionStatus(true);
+    expect(zilch::computer::shouldBank(stopShortGame),
+           "medium may stop just short when it already has a substantial lead");
+
+    GameManager closeOpponentGame;
+    prepareComputerTurn(closeOpponentGame, ComputerDifficulty::Medium);
+    closeOpponentGame.getCurrentPlayer()->getScore().increasePermanentScore(4500);
+    closeOpponentGame.accessPlayers()[1].getScore().increasePermanentScore(4700);
+    closeOpponentGame.getCurrentPlayer()->getScore().increaseRoundScore(450);
+    closeOpponentGame.getCurrentPlayer()->getDice().setNumDiceInPlay(4);
+    closeOpponentGame.registerRoll();
+    closeOpponentGame.setSelectedOptionStatus(true);
+    expect(!zilch::computer::shouldBank(closeOpponentGame),
+           "medium should not stop short when a close opponent makes that tactic unsound");
+}
+
+void computersTakeAReachableFinalChaseWin()
+{
+    GameManager winningGame;
+    prepareComputerTurn(winningGame, ComputerDifficulty::Easy);
+    winningGame.getCurrentPlayer()->getScore().increasePermanentScore(4500);
+    winningGame.accessPlayers()[1].getScore().increasePermanentScore(5200);
+    winningGame.getCurrentPlayer()->getScore().increaseRoundScore(800);
+    winningGame.getCurrentPlayer()->getDice().setNumDiceInPlay(5);
+    winningGame.registerRoll();
+    winningGame.setSelectedOptionStatus(true);
+    winningGame.startFinalRound();
+    expect(zilch::computer::shouldBank(winningGame),
+           "a computer should bank immediately after overtaking the final-chase leader");
+
+    GameManager losingGame;
+    prepareComputerTurn(losingGame, ComputerDifficulty::Easy);
+    losingGame.getCurrentPlayer()->getScore().increasePermanentScore(4500);
+    losingGame.accessPlayers()[1].getScore().increasePermanentScore(5200);
+    losingGame.getCurrentPlayer()->getScore().increaseRoundScore(600);
+    losingGame.getCurrentPlayer()->getDice().setNumDiceInPlay(5);
+    losingGame.registerRoll();
+    losingGame.setSelectedOptionStatus(true);
+    losingGame.startFinalRound();
+    expect(!zilch::computer::shouldBank(losingGame),
+           "a computer should keep rolling while still behind in its last chance");
+}
+
+void hardUsesTheStealingSpecificAcceptanceCurve()
+{
+    constexpr std::array<std::uint32_t, 6> acceptanceMinimum{0, 550, 450, 350, 250, 150};
+    for (std::uint16_t dice = 1; dice <= 5; ++dice) {
+        const std::uint32_t minimum = acceptanceMinimum[dice];
+
+        GameManager tooLow;
+        prepareStealDecision(tooLow, minimum - 50, dice, ComputerDifficulty::Hard);
+        expect(!zilch::computer::shouldAcceptSteal(tooLow),
+               "hard should decline the score step below each Stealing-trained cutoff");
+
+        GameManager enough;
+        prepareStealDecision(enough, minimum, dice, ComputerDifficulty::Hard);
+        expect(zilch::computer::shouldAcceptSteal(enough),
+               "hard should accept at each Stealing-trained cutoff");
+    }
+}
+
+void computerActionPlannerCoversTurnBoundaries()
+{
+    using zilch::computer::TurnAction;
+
+    GameManager freshTurn;
+    prepareComputerTurn(freshTurn, ComputerDifficulty::Easy);
+    expect(zilch::computer::chooseTurnAction(freshTurn, true, false, {}) == TurnAction::Roll,
+           "a fresh computer turn should start with a roll");
+
+    freshTurn.setTurnContinuationStatus(false, true);
+    expect(zilch::computer::chooseTurnAction(freshTurn, false, false, {}) == TurnAction::AcknowledgeBust,
+           "a computer should acknowledge a visible bust before advancing");
+
+    GameManager lowSteal;
+    prepareStealDecision(lowSteal, 500, 1, ComputerDifficulty::Hard);
+    expect(zilch::computer::chooseTurnAction(lowSteal, true, false, {}) == TurnAction::DeclineStealAndRoll,
+           "hard should decline a continuation below its one-die cutoff and roll fresh");
+
+    GameManager strongSteal;
+    prepareStealDecision(strongSteal, 550, 1, ComputerDifficulty::Hard);
+    expect(zilch::computer::chooseTurnAction(strongSteal, true, false, {}) == TurnAction::AcceptStealAndRoll,
+           "hard should accept a continuation at its one-die cutoff before rolling");
+
+    GameManager selection;
+    prepareComputerTurn(selection, ComputerDifficulty::Easy);
+    selection.accessRuleConfig().setOpeningScoreLimit(0);
+    selection.registerRoll();
+    setDice(selection, {{1, 1}, {2, 1}});
+    zilch::rules::RuleManager ruleManager(selection.getRuleConfig());
+    const auto options = ruleManager.evaluate(selection);
+    expect(zilch::computer::chooseTurnAction(selection, false, true, options) == TurnAction::SelectOption,
+           "a computer must score at least one available option after a roll");
+
+    ruleManager.apply(selection, options.front());
+    selection.getCurrentPlayer()->getScore().setRoundScore(600);
+    expect(zilch::computer::chooseTurnAction(selection, false, true, {}) == TurnAction::Bank,
+           "the planner should hand a bankable easy turn to the normal bank transition");
+
+    selection.getCurrentPlayer()->getScore().setRoundScore(550);
+    expect(zilch::computer::chooseTurnAction(selection, false, true, {}) == TurnAction::Roll,
+           "the planner should keep an easy turn moving below its bank target");
 }
 
 void sharedDefaultsAndOpeningScoreAliasesAreStable()
@@ -895,6 +1248,17 @@ int main()
 {
     runTest("diceRollMaintainsConsistentState", diceRollMaintainsConsistentState);
     runTest("scoreAndPlayerDefaultsAreStable", scoreAndPlayerDefaultsAreStable);
+    runTest("mixedHumanAndComputerPlayerSetupIsPreserved", mixedHumanAndComputerPlayerSetupIsPreserved);
+    runTest("computerPoliciesMatchTheTestedProfiles", computerPoliciesMatchTheTestedProfiles);
+    runTest("easyScoresEveryAvailableDieBeforeRolling", easyScoresEveryAvailableDieBeforeRolling);
+    runTest("easyBanksAtItsFixedThreshold", easyBanksAtItsFixedThreshold);
+    runTest("hardCanPreserveAWeakScoringDieForTheReroll", hardCanPreserveAWeakScoringDieForTheReroll);
+    runTest("hardSwitchesTheWholePolicyForStealing", hardSwitchesTheWholePolicyForStealing);
+    runTest("hardBankThresholdMatchesSimulatorRounding", hardBankThresholdMatchesSimulatorRounding);
+    runTest("mediumUsesOpponentAwareFinishDecisions", mediumUsesOpponentAwareFinishDecisions);
+    runTest("computersTakeAReachableFinalChaseWin", computersTakeAReachableFinalChaseWin);
+    runTest("hardUsesTheStealingSpecificAcceptanceCurve", hardUsesTheStealingSpecificAcceptanceCurve);
+    runTest("computerActionPlannerCoversTurnBoundaries", computerActionPlannerCoversTurnBoundaries);
     runTest("sharedDefaultsAndOpeningScoreAliasesAreStable", sharedDefaultsAndOpeningScoreAliasesAreStable);
     runTest("allDisabledScoringRulesAreDetected", allDisabledScoringRulesAreDetected);
     runTest("openingScoreClampsToWinningScore", openingScoreClampsToWinningScore);

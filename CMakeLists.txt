@@ -26,6 +26,7 @@ find_package(OpenMP)
 
 add_executable(Zilch
         main.cpp
+        ComputerStrategy.cpp
         Dice.cpp
         Checker.cpp
         rules/RuleManager.cpp
@@ -66,6 +67,7 @@ endif()
 if(BUILD_TESTING)
     add_executable(ZilchRulesTests
             tests/test_game_rules.cpp
+            ComputerStrategy.cpp
             Dice.cpp
             Checker.cpp
             rules/RuleManager.cpp

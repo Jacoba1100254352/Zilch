@@ -12,13 +12,18 @@ various game screens such as the intro, setup, player turns, and game over.
 
 #include "GameUI.h"
 #include "Checker.h"
+#include "ComputerStrategy.h"
 #include "Dice.h"
 #include "DiceRenderer.h"
 #include "GameManager.h"
 #include "Player.h"
 #include "ResourcePath.h"
 #include "RuleConfig.h"
+#include "rules/RuleManager.h"
 
+#include <algorithm>
+#include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -56,7 +61,7 @@ namespace {
     constexpr float SETUP_GAP       = BASE_GAP;
     constexpr float SETUP_LEFT_X    = UI_CENTER_X - BUTTON_WIDTH - SETUP_GAP * 0.5f;
     constexpr float SETUP_RIGHT_X   = UI_CENTER_X + SETUP_GAP * 0.5f;
-    constexpr float SETUP_ROW1_Y    = 210.f;
+    constexpr float SETUP_ROW1_Y    = 350.f;
     constexpr float SETUP_ROW_STEP  = BASE_STEP;
     constexpr float SETUP_GROUP_GAP = BASE_STEP*0.5f;
     constexpr float SETUP_ROW2_Y    = SETUP_ROW1_Y + SETUP_ROW_STEP;
@@ -67,11 +72,13 @@ namespace {
     constexpr float SETUP_LABEL_X               = BASE_GAP;
     constexpr float SETUP_LABEL_Y               = 110.f;
     constexpr float SETUP_BANK_LABEL_Y_OFFSET   = BASE_STEP*0.5f;
-    constexpr float SETUP_INFO_X                = 300.f;
+    constexpr float SETUP_INFO_X                = 600.f;
     constexpr float SETUP_TITLE_X               = BASE_GAP;
     constexpr float SETUP_TITLE_Y               = BASE_GAP;
     constexpr float NAME_LIST_START_Y           = BASE_CONTENT_Y;
     constexpr float NAME_LIST_X                 = BASE_STEP;
+    constexpr float PLAYER_TYPE_X               = 340.f;
+    constexpr float PLAYER_TYPE_HIT_WIDTH       = 210.f;
 
     // Turn layout
     constexpr float TURN_BTN_ROLL_X   = UI_CENTER_X - BUTTON_WIDTH - PRIMARY_GAP * 0.5f;
@@ -129,6 +136,7 @@ namespace {
     constexpr float NAME_HIT_WIDTH = 260.f;
     constexpr float SCORE_INPUT_HIT_WIDTH = 220.f;
     constexpr float SCORE_INPUT_HIT_HEIGHT = 32.f;
+    constexpr float COMPUTER_ACTION_DELAY_SECONDS = 0.55f;
     
     // Bank threshold reference.
     constexpr float INFO_BASE_Y = SCORE_Y;
@@ -174,6 +182,20 @@ sf::Color GameUI::defaultButtonTextColor() {
     return Button{}.textColor;
 }
 
+bool GameUI::computerActionReady(const std::string& actionKey)
+{
+    if (computerActionKey != actionKey) {
+        computerActionKey = actionKey;
+        computerActionClock.restart();
+        return false;
+    }
+    if (computerActionClock.getElapsedTime().asSeconds() < COMPUTER_ACTION_DELAY_SECONDS)
+        return false;
+
+    computerActionKey.clear();
+    return true;
+}
+
 /**
  * @brief Constructs a GameUI instance, initializing the SFML window and loading the UI font.
  */
@@ -207,7 +229,7 @@ void GameUI::run(GameManager& game)
     const Checker checker(game);
 
     // Game setup variables
-    std::vector<std::string> playerNames = {"Player 1", "Player 2"};
+    std::vector<PlayerSetup> playerSetups = {{"Player 1"}, {"Player 2"}};
     uint32_t scoreLimit = 5000;
 
     // Start in intro state
@@ -237,13 +259,13 @@ void GameUI::run(GameManager& game)
         // Render based on current game state
         switch (game.getStateMachine().getState()) {
             case GameStateMachine::State::Intro:
-                renderIntro(game, playerNames, scoreLimit, waitingForRoll, awaitingSelection, optionButtons, events);
+                renderIntro(game, playerSetups, scoreLimit, waitingForRoll, awaitingSelection, optionButtons, events);
                 break;
             case GameStateMachine::State::Rules:
                 renderRules(game, events);
                 break;
             case GameStateMachine::State::Setup:
-                renderSetup(game, playerNames, scoreLimit, events);
+                renderSetup(game, playerSetups, scoreLimit, events);
                 waitingForRoll = true;
                 awaitingSelection = false;
                 optionButtons.clear();
@@ -267,7 +289,7 @@ void GameUI::run(GameManager& game)
  * @brief Renders the intro screen with a title and a button to open the setup screen.
  *
  * @param game Reference to the GameManager instance.
- * @param playerNames Vector of player names.
+ * @param playerSetups Vector of player names and controller choices.
  * @param scoreLimit Reference to the score limit.
  * @param waitingForRoll True if waiting for the player to roll dice.
  * @param awaitingSelection True if awaiting player selection.
@@ -276,7 +298,7 @@ void GameUI::run(GameManager& game)
  */
 void GameUI::renderIntro(
     GameManager& game,
-    std::vector<std::string>& playerNames,
+    std::vector<PlayerSetup>& playerSetups,
     uint32_t& scoreLimit,
     bool& waitingForRoll,
     bool& awaitingSelection,
@@ -328,7 +350,7 @@ void GameUI::renderIntro(
             if (!canStart)
                 return;
             game.accessRuleConfig().clampOpeningScoreLimitTo(scoreLimit);
-            game.setPlayers(playerNames);
+            game.setPlayerSetups(playerSetups);
             game.setScoreLimit(scoreLimit);
             game.startTurn(0);
             waitingForRoll = true;
@@ -495,12 +517,12 @@ void GameUI::renderRules(GameManager& game, const std::vector<sf::Event>& events
  * @brief Renders the setup screen where players can be added/removed and game rules configured.
  *
  * @param game Reference to the GameManager instance.
- * @param playerNames Vector of player names to be configured.
+ * @param playerSetups Vector of human/computer player setups to be configured.
  * @param scoreLimit Reference to the score limit to be configured.
  * @param events Vector of SFML events to handle user input.
  */
 void GameUI::renderSetup(
-    GameManager& game, std::vector<std::string>& playerNames, uint32_t& scoreLimit,
+    GameManager& game, std::vector<PlayerSetup>& playerSetups, uint32_t& scoreLimit,
     const std::vector<sf::Event>& events
 )
 {
@@ -508,7 +530,7 @@ void GameUI::renderSetup(
     RuleConfig& config = game.accessRuleConfig();
 
     // Clear name focus if list shrinks.
-    if (focusedNameIndex >= static_cast<int>(playerNames.size())) {
+    if (focusedNameIndex >= static_cast<int>(playerSetups.size())) {
         focusedNameIndex = -1;
         nameEditBuffer.clear();
     }
@@ -548,17 +570,31 @@ void GameUI::renderSetup(
         }
     };
 
+    auto cyclePlayerType = [](PlayerSetup& setup)->void {
+        if (setup.kind == PlayerKind::Human) {
+            setup.kind = PlayerKind::Computer;
+            setup.difficulty = ComputerDifficulty::Easy;
+        } else if (setup.difficulty == ComputerDifficulty::Easy) {
+            setup.difficulty = ComputerDifficulty::Medium;
+        } else if (setup.difficulty == ComputerDifficulty::Medium) {
+            setup.difficulty = ComputerDifficulty::Hard;
+        } else {
+            setup.kind = PlayerKind::Human;
+            setup.difficulty = ComputerDifficulty::Medium;
+        }
+    };
+
     // Buttons for player management and rule configuration
     std::vector<Button> buttons;
 
     // Player management buttons
-    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW1_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Add Player", [&playerNames]()->void {
-        if (playerNames.size() < 6)
-            playerNames.emplace_back("Player " + std::to_string(playerNames.size() + 1));
+    buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW1_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Add Player", [&playerSetups]()->void {
+        if (playerSetups.size() < 6)
+            playerSetups.push_back({"Player " + std::to_string(playerSetups.size() + 1)});
     }));
-    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW1_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Remove Player", [&playerNames]()->void {
-        if (playerNames.size() > 1)
-            playerNames.pop_back();
+    buttons.emplace_back(makeButton(SETUP_RIGHT_X, SETUP_ROW1_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Remove Player", [&playerSetups]()->void {
+        if (playerSetups.size() > 1)
+            playerSetups.pop_back();
     }));
     buttons.emplace_back(makeButton(SETUP_LEFT_X, SETUP_ROW2_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "+500 Winning Score", [&scoreLimit]()->void {
         scoreLimit = std::min<uint32_t>(scoreLimit + 500, 1000000u);
@@ -634,18 +670,18 @@ void GameUI::renderSetup(
             if (focusedNameIndex >= 0) {
                 if (ASCII >= 32 && ASCII < 127 && nameEditBuffer.size() < NAME_MAX_LEN) {
                     nameEditBuffer.push_back(static_cast<char>(ASCII));
-                    playerNames[static_cast<std::size_t>(focusedNameIndex)] = nameEditBuffer;
+                    playerSetups[static_cast<std::size_t>(focusedNameIndex)].name = nameEditBuffer;
                 } else if (ASCII == 8) { // backspace
                     if (!nameEditBuffer.empty()) {
                         nameEditBuffer.pop_back();
-                        playerNames[static_cast<std::size_t>(focusedNameIndex)] = nameEditBuffer;
+                        playerSetups[static_cast<std::size_t>(focusedNameIndex)].name = nameEditBuffer;
                     }
                 } else if (ASCII == 13 || ASCII == 27) { // enter or escape
-                    if (ASCII == 13 && focusedNameIndex == static_cast<int>(playerNames.size() - 1) && playerNames.size() < 6) {
+                    if (ASCII == 13 && focusedNameIndex == static_cast<int>(playerSetups.size() - 1) && playerSetups.size() < 6) {
                         // Add a new player and focus it.
-                        const std::string newName = "Player " + std::to_string(playerNames.size() + 1);
-                        playerNames.push_back(newName);
-                        focusedNameIndex = static_cast<int>(playerNames.size() - 1);
+                        const std::string newName = "Player " + std::to_string(playerSetups.size() + 1);
+                        playerSetups.push_back({newName});
+                        focusedNameIndex = static_cast<int>(playerSetups.size() - 1);
                         nameEditBuffer = newName;
                     } else {
                         focusedNameIndex = -1;
@@ -699,18 +735,36 @@ void GameUI::renderSetup(
                 consumed = true;
             }
 
+            // Player-type hit test. Each click cycles Human, Easy, Medium, Hard.
+            if (!consumed) {
+                float hitY = NAME_LIST_START_Y;
+                for (PlayerSetup& setup : playerSetups) {
+                    if (mx >= PLAYER_TYPE_X && mx <= PLAYER_TYPE_X + PLAYER_TYPE_HIT_WIDTH &&
+                        my >= hitY && my <= hitY + PLAYER_Y_OFFSET) {
+                        commitScoreLimit();
+                        commitBankThreshold();
+                        focusedNameIndex = -1;
+                        nameEditBuffer.clear();
+                        cyclePlayerType(setup);
+                        consumed = true;
+                        break;
+                    }
+                    hitY += PLAYER_Y_OFFSET;
+                }
+            }
+
             // Name hit test
             if (!consumed) {
                 bool hitName = false;
                 float hitY = NAME_LIST_START_Y;
-                for (std::size_t i = 0; i < playerNames.size(); ++i) {
+                for (std::size_t i = 0; i < playerSetups.size(); ++i) {
                     const float y0 = hitY;
                     const float y1 = hitY + PLAYER_Y_OFFSET;
                     if (mx >= NAME_LIST_X && mx <= NAME_LIST_X + NAME_HIT_WIDTH && my >= y0 && my <= y1) {
                         commitScoreLimit();
                         commitBankThreshold();
                         focusedNameIndex = static_cast<int>(i);
-                        nameEditBuffer = playerNames[i];
+                        nameEditBuffer = playerSetups[i].name;
                         hitName = true;
                         break;
                     }
@@ -745,16 +799,30 @@ void GameUI::renderSetup(
     playerLabel.setPosition(SETUP_LABEL_X, SETUP_LABEL_Y);
     window.draw(playerLabel);
 
+    sf::Text typeLabel("Controller (click to change):", uiFont, LABEL_FONT_SIZE);
+    typeLabel.setFillColor(COLOR_TEXT_MUTED);
+    typeLabel.setPosition(PLAYER_TYPE_X, SETUP_LABEL_Y);
+    window.draw(typeLabel);
+
     // List configured player names.
     float nameY = NAME_LIST_START_Y;
-    for (std::size_t idx = 0; idx < playerNames.size(); ++idx) {
-        std::string display = playerNames[idx];
+    for (std::size_t idx = 0; idx < playerSetups.size(); ++idx) {
+        std::string display = playerSetups[idx].name;
         if (static_cast<int>(idx) == focusedNameIndex)
             display += "|";
         sf::Text t(display, uiFont, LABEL_FONT_SIZE);
         t.setFillColor(COLOR_TEXT_PRIMARY);
         t.setPosition(NAME_LIST_X, nameY);
         window.draw(t);
+
+        std::string typeName = "Human";
+        if (playerSetups[idx].kind == PlayerKind::Computer)
+            typeName = "Computer: " + std::string(zilch::computer::difficultyName(playerSetups[idx].difficulty));
+        sf::Text typeText(typeName, uiFont, LABEL_FONT_SIZE);
+        typeText.setFillColor(playerSetups[idx].kind == PlayerKind::Computer ? sf::Color(230, 210, 80, 240) : COLOR_TEXT_PRIMARY);
+        typeText.setPosition(PLAYER_TYPE_X, nameY);
+        window.draw(typeText);
+
         nameY += PLAYER_Y_OFFSET;
     }
 
@@ -777,7 +845,7 @@ void GameUI::renderSetup(
     if (!config.hasScoringRuleEnabled()) {
         sf::Text warning("Start disabled: enable at least one scoring rule.", uiFont, INTRO_DESC_SIZE);
         warning.setFillColor(COLOR_BUST_TEXT);
-        warning.setPosition(SETUP_LEFT_X, backBtnY + BUTTON_HEIGHT + 16.f);
+        warning.setPosition(SETUP_LABEL_X, SETUP_ROW1_Y - 28.f);
         window.draw(warning);
     }
 
@@ -888,6 +956,31 @@ void GameUI::renderTurn(
         }
     };
 
+    auto bankAndAdvance = [&]()->void {
+        if (!game.canBankCurrentScore())
+            return;
+
+        game.endTurnAndBank();
+        const uint32_t newTotal = player->getScore().getPermanentScore();
+        const uint32_t scoreLimit = player->getScore().getScoreLimit();
+
+        if (game.getRuleConfig().finalChaseEnabled()) {
+            if (!game.isFinalRoundActive() && newTotal >= scoreLimit)
+                game.startFinalRound();
+            game.updateFinalRoundLeaderForCurrentPlayer();
+            advanceToNextOrEnd();
+        } else if (newTotal >= scoreLimit) {
+            game.getStateMachine().setState(GameStateMachine::State::GameOver);
+        } else {
+            advanceToNextOrEnd();
+        }
+    };
+
+    auto acknowledgeBust = [&]()->void {
+        game.clearBustPending();
+        advanceToNextOrEnd();
+    };
+
     // Offer either the steal decision or the normal roll action.
     if (waitingForRoll && !game.getBustPending()) {
         if (game.hasStealOfferForCurrentPlayer()) {
@@ -915,29 +1008,7 @@ void GameUI::renderTurn(
 
     // Allow banking after at least one roll if total (permanent + round) meets threshold and no bust is pending.
     if (game.canBankCurrentScore())
-        primaryButtons.emplace_back(makeButton(TURN_BTN_BANK_X, TURN_BTN_BANK_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Bank Score", [&]()->void {
-            if (!game.canBankCurrentScore()) return;
-
-            // Commit the bank and finalize the turn.
-            game.endTurnAndBank();
-            const uint32_t newTotal = player->getScore().getPermanentScore();
-            const uint32_t scoreLimit = player->getScore().getScoreLimit();
-
-            // Handle end-of-game or final round logic.
-            if (const bool finalChase = game.getRuleConfig().finalChaseEnabled(); finalChase) {
-                if (!game.isFinalRoundActive() && newTotal >= scoreLimit) {
-                    game.startFinalRound();
-                }
-                game.updateFinalRoundLeaderForCurrentPlayer();
-
-                advanceToNextOrEnd();
-            } else {
-                if (newTotal >= scoreLimit)
-                    game.getStateMachine().setState(GameStateMachine::State::GameOver);
-                else
-                    advanceToNextOrEnd();
-            }
-        }));
+        primaryButtons.emplace_back(makeButton(TURN_BTN_BANK_X, TURN_BTN_BANK_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Bank Score", bankAndAdvance));
 
     // Offer roll again after at least one option is chosen and dice remain.
     if (awaitingSelection && game.getSelectedOptionStatus() && player->getDice().getNumDiceInPlay() > 0 && !game.getBustPending()) {
@@ -948,21 +1019,18 @@ void GameUI::renderTurn(
 
     // Present bust acknowledgment button when a bust is pending.
     if (game.getBustPending()) {
-        primaryButtons.emplace_back(makeButton(TURN_BTN_PASS_X, TURN_BTN_PASS_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Pass Dice", [&]()->void {
-            game.clearBustPending();
-            advanceToNextOrEnd();
-        }));
+        primaryButtons.emplace_back(makeButton(TURN_BTN_PASS_X, TURN_BTN_PASS_Y, BUTTON_WIDTH, BUTTON_HEIGHT, "Pass Dice", acknowledgeBust));
     }
 
     // Automatically prompt for roll if no options are available but the turn continues.
-    if (!waitingForRoll && optionButtons.empty() && game.getTurnContinuationStatus()) {
+    if (!waitingForRoll && !awaitingSelection && optionButtons.empty() && game.getTurnContinuationStatus()) {
         waitingForRoll = true;
         awaitingSelection = false;
     }
 
     // Handle button click events for both option and primary buttons.
     for (const sf::Event& e : events)
-        if (!renderer.isAnimating() && e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left) {
+        if (!player->isComputer() && !renderer.isAnimating() && e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left) {
             const auto mx = static_cast<float>(e.mouseButton.x);
             const auto my = static_cast<float>(e.mouseButton.y);
             handleButtonClick(mx, my, optionButtons);
@@ -999,6 +1067,56 @@ void GameUI::renderTurn(
         }
     }
 
+    // Drive one visible computer action at a time after any dice animation completes.
+    if (player->isComputer() && !renderer.isAnimating() &&
+        game.getStateMachine().getState() == GameStateMachine::State::PlayerTurn) {
+        std::ostringstream actionKey;
+        actionKey << game.getCurrentIndex() << ':' << waitingForRoll << ':' << awaitingSelection << ':'
+                  << game.getBustPending() << ':' << game.getHasRolledThisTurn() << ':'
+                  << game.getSelectedOptionStatus() << ':' << game.getRollCountThisTurn() << ':'
+                  << player->getScore().getRoundScore() << ':' << player->getDice().getNumDiceInPlay() << ':'
+                  << game.getStealOfferScore() << ':' << game.getStealOfferDiceCount();
+        for (const auto& [value, count] : player->getDice().diceSetMap)
+            actionKey << ':' << value << 'x' << count;
+
+        if (computerActionReady(actionKey.str())) {
+            zilch::rules::RuleManager ruleManager(game.getRuleConfig());
+            const std::vector<zilch::rules::GameOption> options =
+                awaitingSelection ? ruleManager.evaluate(game) : std::vector<zilch::rules::GameOption>{};
+            switch (zilch::computer::chooseTurnAction(game, waitingForRoll, awaitingSelection, options)) {
+                case zilch::computer::TurnAction::AcknowledgeBust:
+                    acknowledgeBust();
+                    break;
+                case zilch::computer::TurnAction::AcceptStealAndRoll:
+                    if (!game.acceptStealOffer())
+                        game.declineStealOffer();
+                    performRoll();
+                    break;
+                case zilch::computer::TurnAction::DeclineStealAndRoll:
+                    game.declineStealOffer();
+                    performRoll();
+                    break;
+                case zilch::computer::TurnAction::SelectOption:
+                    if (!options.empty()) {
+                        ruleManager.apply(game, options[zilch::computer::chooseOption(game, options)]);
+                        optionButtons.clear();
+                        refreshDiceView();
+                    }
+                    break;
+                case zilch::computer::TurnAction::Roll:
+                    performRoll();
+                    break;
+                case zilch::computer::TurnAction::Bank:
+                    bankAndAdvance();
+                    break;
+                case zilch::computer::TurnAction::None:
+                    break;
+            }
+        }
+    } else {
+        computerActionKey.clear();
+    }
+
     // If the turn is marked as over and no bust is pending, rotate to the next player.
     if (!game.getTurnContinuationStatus() && !game.getBustPending() && game.getStateMachine().getState() == GameStateMachine::State::PlayerTurn)
         advanceToNextOrEnd();
@@ -1011,7 +1129,8 @@ void GameUI::renderTurn(
     const bool animating = renderer.isAnimating();
 
     // Draw player name.
-    sf::Text header("Current Player: " + player->getName(), uiFont, HEADER_FONT_SIZE);
+    const std::string headerText = "Current Player: " + player->getName();
+    sf::Text header(headerText, uiFont, HEADER_FONT_SIZE);
     header.setFillColor(COLOR_TEXT_PRIMARY);
     header.setPosition(HEADER_X, HEADER_Y);
     window.draw(header);
@@ -1107,7 +1226,7 @@ void GameUI::renderTurn(
     }
 
     // Prompt user when awaiting a score selection and no primary actions are visible.
-    if (awaitingSelection && primaryButtons.empty() && !game.getBustPending() && !animating) {
+    if (!player->isComputer() && awaitingSelection && primaryButtons.empty() && !game.getBustPending() && !animating) {
         const sf::Vector2u tsize = window.getSize();
         sf::Text prompt("Select a score option", uiFont, NOTICE_FONT_SIZE);
         prompt.setFillColor(sf::Color(210, 190, 80, 220));
@@ -1184,10 +1303,19 @@ void GameUI::renderTurn(
         }
     };
 
-    // Draw primary and option buttons.
+    // Draw controls for a human, or a paced status line while a computer acts.
     if (!animating) {
-        drawButtons(primaryButtons);
-        drawButtons(optionButtons);
+        if (player->isComputer()) {
+            const std::string status = std::string(zilch::computer::difficultyName(player->getComputerDifficulty())) +
+                                       " computer is playing...";
+            sf::Text computerStatus(status, uiFont, NOTICE_FONT_SIZE);
+            computerStatus.setFillColor(sf::Color(230, 210, 80, 240));
+            computerStatus.setPosition(UI_CENTER_X - 150.f, TURN_NOTICE_Y);
+            window.draw(computerStatus);
+        } else {
+            drawButtons(primaryButtons);
+            drawButtons(optionButtons);
+        }
     }
 
     // Render dice on top of the UI layer.

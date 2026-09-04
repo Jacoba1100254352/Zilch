@@ -40,6 +40,7 @@ public:
 
 	// Players
 	void setPlayers(const std::vector<std::string>& playerNames);
+	void setPlayerSetups(const std::vector<PlayerSetup>& playerSetups);
 	[[nodiscard]] const std::vector<Player>& getPlayers() const { return players; }
 	[[nodiscard]] std::vector<Player>& accessPlayers() { return players; }
 

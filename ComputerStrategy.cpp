@@ -1,0 +1,340 @@
+#include "ComputerStrategy.h"
+
+#include "Dice.h"
+#include "GameManager.h"
+#include "RuleConfig.h"
+#include "Score.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <optional>
+#include <stdexcept>
+
+namespace zilch::computer {
+namespace {
+
+constexpr Policy EASY_POLICY{
+    "Easy",
+    {0, 600, 600, 600, 600, 600, 600},
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+};
+
+constexpr Policy MEDIUM_POLICY{
+    "Medium",
+    {0, 350, 500, 700, 850, 1000, 1150},
+    1.0,
+    55.0,
+    240.0,
+    95.0,
+    0.08,
+    0.10,
+    0.25,
+    15.0
+};
+
+// Champion from the standard-game Computers vs Zilch mirrored holdout.
+constexpr Policy HARD_STANDARD_POLICY{
+    "Hard",
+    {0, 200, 1021, 1128, 1506, 2130, 2130},
+    1.0045,
+    36.0805,
+    354.561,
+    91.9329,
+    0.0,
+    0.293194,
+    0.193316,
+    136.066
+};
+
+// Separately trained and holdout-tested because Stealing changes dice value.
+constexpr Policy HARD_STEALING_POLICY{
+    "Hard with Stealing",
+    {0, 313, 313, 1106, 1360, 1360, 1376},
+    0.88553,
+    91.2663,
+    229.628,
+    94.2546,
+    0.0,
+    0.187935,
+    0.20764,
+    -26.2974
+};
+
+ComputerDifficulty currentDifficulty(const GameManager& game)
+{
+    const Player* player = game.getCurrentPlayer();
+    return player && player->isComputer() ? player->getComputerDifficulty() : ComputerDifficulty::Medium;
+}
+
+const Policy& currentPolicy(const GameManager& game)
+{
+    return policyForDifficulty(currentDifficulty(game), game.getRuleConfig().stealingEnabled());
+}
+
+std::uint16_t consumedDiceCount(const rules::GameOption& option)
+{
+    std::uint16_t count = 0;
+    for (const auto& [value, copies] : option.consumedDice) {
+        static_cast<void>(value);
+        count = static_cast<std::uint16_t>(count + copies);
+    }
+    return count;
+}
+
+std::uint16_t nextDiceCount(const GameManager& game, const rules::GameOption& option)
+{
+    const Player* player = game.getCurrentPlayer();
+    if (!player)
+        return FULL_SET_OF_DICE;
+
+    const std::uint16_t current = player->getDice().getNumDiceInPlay();
+    const std::uint16_t consumed = consumedDiceCount(option);
+    return consumed >= current ? FULL_SET_OF_DICE : static_cast<std::uint16_t>(current - consumed);
+}
+
+double optionUtility(const GameManager& game, const rules::GameOption& option, const Policy& policy)
+{
+    const std::uint16_t diceAfterOption = nextDiceCount(game, option);
+    double utility = policy.scoreWeight * static_cast<double>(option.pointsAwarded) +
+                     policy.remainingDiceWeight * static_cast<double>(diceAfterOption);
+    if (diceAfterOption == FULL_SET_OF_DICE)
+        utility += policy.hotDiceWeight;
+    if (option.ruleType == rules::RuleType::Multiple || option.ruleType == rules::RuleType::AddMultiple)
+        utility += policy.multipleWeight;
+    if (option.ruleType == rules::RuleType::AddMultiple)
+        utility += policy.multipleWeight * 0.5;
+    return utility;
+}
+
+std::uint32_t maxOpponentScore(const GameManager& game)
+{
+    std::uint32_t maximum = 0;
+    const auto& players = game.getPlayers();
+    for (std::size_t index = 0; index < players.size(); ++index) {
+        if (index == game.getCurrentIndex())
+            continue;
+        maximum = std::max(maximum, players[index].getScore().getPermanentScore());
+    }
+    return maximum;
+}
+
+std::optional<bool> endgameBankDecision(const GameManager& game, const ComputerDifficulty difficulty)
+{
+    const Player* player = game.getCurrentPlayer();
+    if (!player)
+        return false;
+
+    const Score& score = player->getScore();
+    const std::uint32_t projectedTotal = score.getPermanentScore() + score.getRoundScore();
+    const std::uint32_t opponentScore = maxOpponentScore(game);
+    const std::uint32_t winningScore = score.getScoreLimit();
+    const std::uint16_t remainingDice = player->getDice().getNumDiceInPlay();
+
+    if (game.isFinalRoundActive()) {
+        const bool canTie = game.getRuleConfig().tiesAllowed() && projectedTotal >= opponentScore;
+        return canTie || projectedTotal > opponentScore;
+    }
+
+    if (projectedTotal >= winningScore) {
+        if (!game.getRuleConfig().finalChaseEnabled() || game.getPlayers().size() == 1 ||
+            difficulty == ComputerDifficulty::Easy) {
+            return true;
+        }
+
+        const std::uint32_t opponentDistance = opponentScore >= winningScore ? 0 : winningScore - opponentScore;
+        const std::uint32_t desiredBuffer = opponentDistance <= 500 ? 1000 : opponentDistance <= 1000 ? 500 : 0;
+        if (desiredBuffer == 0 || projectedTotal >= winningScore + desiredBuffer)
+            return true;
+
+        const std::uint16_t minimumDiceToPress = difficulty == ComputerDifficulty::Hard ? 3 : 4;
+        return remainingDice < minimumDiceToPress;
+    }
+
+    if (!game.getRuleConfig().finalChaseEnabled() || difficulty == ComputerDifficulty::Easy)
+        return std::nullopt;
+
+    const std::uint32_t distanceToTarget = winningScore - projectedTotal;
+    if (distanceToTarget <= 150) {
+        const std::int64_t lead = static_cast<std::int64_t>(projectedTotal) - opponentScore;
+        if (lead >= 500)
+            return true;
+        if (remainingDice >= 3)
+            return false;
+    }
+
+    return std::nullopt;
+}
+
+std::int64_t adjustedBankThreshold(const GameManager& game, const Policy& policy)
+{
+    const Player& player = *game.getCurrentPlayer();
+    const std::uint16_t dice = player.getDice().getNumDiceInPlay();
+    std::int64_t threshold = policy.bankThresholdByDice.at(std::min<std::size_t>(dice, FULL_SET_OF_DICE));
+    const std::int64_t lead = static_cast<std::int64_t>(player.getScore().getPermanentScore()) - maxOpponentScore(game);
+
+    if (lead > 0)
+        threshold -= static_cast<std::int64_t>(static_cast<double>(lead) * policy.leadFactor);
+    else
+        threshold += static_cast<std::int64_t>(static_cast<double>(-lead) * policy.trailFactor);
+
+    const std::int64_t projectedTotal = static_cast<std::int64_t>(player.getScore().getPermanentScore()) +
+                                        player.getScore().getRoundScore();
+    const std::int64_t distanceToWin = static_cast<std::int64_t>(player.getScore().getScoreLimit()) - projectedTotal;
+    const std::int64_t closingWindow = std::max<std::int64_t>(0, 1500 - std::max<std::int64_t>(distanceToWin, 0));
+    threshold -= static_cast<std::int64_t>(static_cast<double>(closingWindow) * policy.closingFactor);
+
+    return std::clamp<std::int64_t>(threshold, 200, player.getScore().getScoreLimit());
+}
+
+}
+
+std::string_view difficultyName(const ComputerDifficulty difficulty)
+{
+    switch (difficulty) {
+        case ComputerDifficulty::Easy: return "Easy";
+        case ComputerDifficulty::Medium: return "Medium";
+        case ComputerDifficulty::Hard: return "Hard";
+    }
+    return "Unknown";
+}
+
+const Policy& policyForDifficulty(const ComputerDifficulty difficulty, const bool stealingEnabled)
+{
+    switch (difficulty) {
+        case ComputerDifficulty::Easy: return EASY_POLICY;
+        case ComputerDifficulty::Medium: return MEDIUM_POLICY;
+        case ComputerDifficulty::Hard: return stealingEnabled ? HARD_STEALING_POLICY : HARD_STANDARD_POLICY;
+    }
+    return MEDIUM_POLICY;
+}
+
+std::size_t chooseOption(const GameManager& game, const std::vector<rules::GameOption>& options)
+{
+    if (options.empty())
+        throw std::invalid_argument("A computer cannot choose from an empty scoring-option list.");
+
+    const ComputerDifficulty difficulty = currentDifficulty(game);
+    std::size_t bestIndex = 0;
+    if (difficulty != ComputerDifficulty::Hard) {
+        for (std::size_t index = 1; index < options.size(); ++index) {
+            if (options[index].pointsAwarded > options[bestIndex].pointsAwarded)
+                bestIndex = index;
+        }
+        return bestIndex;
+    }
+
+    const Policy& policy = currentPolicy(game);
+    double bestUtility = optionUtility(game, options.front(), policy);
+    for (std::size_t index = 1; index < options.size(); ++index) {
+        const double utility = optionUtility(game, options[index], policy);
+        if (utility > bestUtility) {
+            bestUtility = utility;
+            bestIndex = index;
+        }
+    }
+    return bestIndex;
+}
+
+PostSelectionDecision decideAfterSelection(
+    const GameManager& game,
+    const std::vector<rules::GameOption>& remainingOptions)
+{
+    const ComputerDifficulty difficulty = currentDifficulty(game);
+    if (!remainingOptions.empty()) {
+        if (difficulty != ComputerDifficulty::Hard)
+            return PostSelectionDecision::SelectAgain;
+
+        const Policy& policy = currentPolicy(game);
+        double bestContinuation = optionUtility(game, remainingOptions.front(), policy);
+        for (std::size_t index = 1; index < remainingOptions.size(); ++index)
+            bestContinuation = std::max(bestContinuation, optionUtility(game, remainingOptions[index], policy));
+
+        const Player& player = *game.getCurrentPlayer();
+        const double rollUtility = policy.rollBias +
+            policy.remainingDiceWeight * static_cast<double>(player.getDice().getNumDiceInPlay());
+        if (bestContinuation >= rollUtility)
+            return PostSelectionDecision::SelectAgain;
+    }
+
+    return shouldBank(game) ? PostSelectionDecision::Bank : PostSelectionDecision::Roll;
+}
+
+TurnAction chooseTurnAction(
+    const GameManager& game,
+    const bool waitingForRoll,
+    const bool awaitingSelection,
+    const std::vector<rules::GameOption>& remainingOptions)
+{
+    if (game.getBustPending())
+        return TurnAction::AcknowledgeBust;
+
+    if (waitingForRoll) {
+        if (game.hasStealOfferForCurrentPlayer()) {
+            return shouldAcceptSteal(game) ? TurnAction::AcceptStealAndRoll :
+                                             TurnAction::DeclineStealAndRoll;
+        }
+        if (game.getHasRolledThisTurn() && shouldBank(game))
+            return TurnAction::Bank;
+        return TurnAction::Roll;
+    }
+
+    if (awaitingSelection) {
+        if (!remainingOptions.empty() && !game.getSelectedOptionStatus())
+            return TurnAction::SelectOption;
+
+        switch (decideAfterSelection(game, remainingOptions)) {
+            case PostSelectionDecision::SelectAgain:
+                return remainingOptions.empty() ? TurnAction::None : TurnAction::SelectOption;
+            case PostSelectionDecision::Roll:
+                return TurnAction::Roll;
+            case PostSelectionDecision::Bank:
+                return TurnAction::Bank;
+        }
+    }
+
+    return TurnAction::None;
+}
+
+bool shouldBank(const GameManager& game)
+{
+    if (!game.canBankCurrentScore())
+        return false;
+
+    const ComputerDifficulty difficulty = currentDifficulty(game);
+    if (const std::optional<bool> endgameDecision = endgameBankDecision(game, difficulty); endgameDecision)
+        return *endgameDecision;
+
+    const Player& player = *game.getCurrentPlayer();
+    return player.getScore().getRoundScore() >= static_cast<std::uint64_t>(adjustedBankThreshold(game, currentPolicy(game)));
+}
+
+bool shouldAcceptSteal(const GameManager& game)
+{
+    if (!game.canCurrentPlayerSteal())
+        return false;
+
+    const ComputerDifficulty difficulty = currentDifficulty(game);
+    const std::uint32_t inheritedScore = game.getStealOfferScore();
+    const std::uint16_t dice = game.getStealOfferDiceCount();
+    if (difficulty == ComputerDifficulty::Easy)
+        return inheritedScore >= 600;
+    if (difficulty == ComputerDifficulty::Medium) {
+        const Policy& policy = policyForDifficulty(ComputerDifficulty::Medium, true);
+        return static_cast<double>(inheritedScore) >= policy.bankThresholdByDice.at(dice) * 0.7;
+    }
+
+    const Policy& policy = policyForDifficulty(ComputerDifficulty::Hard, true);
+    const double continuationUtility = policy.scoreWeight * static_cast<double>(inheritedScore) +
+        policy.remainingDiceWeight * static_cast<double>(dice) + policy.rollBias;
+    const double freshRollUtility = policy.remainingDiceWeight * FULL_SET_OF_DICE;
+    return continuationUtility >= freshRollUtility;
+}
+
+}
