@@ -39,10 +39,10 @@ constexpr Policy MEDIUM_POLICY{
     15.0
 };
 
-// Champion from the standard-game Computers vs Zilch mirrored holdout.
+// Refined against incumbent Hard in a 500,000-game mirrored holdout.
 constexpr Policy HARD_STANDARD_POLICY{
     "Hard",
-    {0, 200, 1021, 1128, 1506, 2130, 2130},
+    {0, 200, 1021, 1128, 1506, 2130, 5000},
     1.0045,
     36.0805,
     354.561,
@@ -172,25 +172,25 @@ std::optional<bool> endgameBankDecision(const GameManager& game, const ComputerD
     return std::nullopt;
 }
 
-std::int64_t adjustedBankThreshold(const GameManager& game, const Policy& policy)
+double adjustedBankThreshold(const GameManager& game, const Policy& policy)
 {
     const Player& player = *game.getCurrentPlayer();
     const std::uint16_t dice = player.getDice().getNumDiceInPlay();
-    std::int64_t threshold = policy.bankThresholdByDice.at(std::min<std::size_t>(dice, FULL_SET_OF_DICE));
+    double threshold = policy.bankThresholdByDice.at(std::min<std::size_t>(dice, FULL_SET_OF_DICE));
     const std::int64_t lead = static_cast<std::int64_t>(player.getScore().getPermanentScore()) - maxOpponentScore(game);
 
     if (lead > 0)
-        threshold -= static_cast<std::int64_t>(static_cast<double>(lead) * policy.leadFactor);
+        threshold -= static_cast<double>(lead) * policy.leadFactor;
     else
-        threshold += static_cast<std::int64_t>(static_cast<double>(-lead) * policy.trailFactor);
+        threshold += static_cast<double>(-lead) * policy.trailFactor;
 
     const std::int64_t projectedTotal = static_cast<std::int64_t>(player.getScore().getPermanentScore()) +
                                         player.getScore().getRoundScore();
     const std::int64_t distanceToWin = static_cast<std::int64_t>(player.getScore().getScoreLimit()) - projectedTotal;
     const std::int64_t closingWindow = std::max<std::int64_t>(0, 1500 - std::max<std::int64_t>(distanceToWin, 0));
-    threshold -= static_cast<std::int64_t>(static_cast<double>(closingWindow) * policy.closingFactor);
+    threshold -= static_cast<double>(closingWindow) * policy.closingFactor;
 
-    return std::clamp<std::int64_t>(threshold, 200, player.getScore().getScoreLimit());
+    return std::clamp(threshold, 200.0, static_cast<double>(player.getScore().getScoreLimit()));
 }
 
 }
@@ -222,7 +222,8 @@ std::size_t chooseOption(const GameManager& game, const std::vector<rules::GameO
 
     const ComputerDifficulty difficulty = currentDifficulty(game);
     std::size_t bestIndex = 0;
-    if (difficulty != ComputerDifficulty::Hard) {
+    if (difficulty != ComputerDifficulty::Hard ||
+        (!game.getRuleConfig().stealingEnabled() && game.getComputerBankCommitted())) {
         for (std::size_t index = 1; index < options.size(); ++index) {
             if (options[index].pointsAwarded > options[bestIndex].pointsAwarded)
                 bestIndex = index;
@@ -243,10 +244,14 @@ std::size_t chooseOption(const GameManager& game, const std::vector<rules::GameO
 }
 
 PostSelectionDecision decideAfterSelection(
-    const GameManager& game,
+    GameManager& game,
     const std::vector<rules::GameOption>& remainingOptions)
 {
     const ComputerDifficulty difficulty = currentDifficulty(game);
+    const bool collectBeforeBank = difficulty == ComputerDifficulty::Hard &&
+                                   !game.getRuleConfig().stealingEnabled();
+    if (collectBeforeBank && game.getComputerBankCommitted())
+        return remainingOptions.empty() ? PostSelectionDecision::Bank : PostSelectionDecision::SelectAgain;
     if (!remainingOptions.empty()) {
         if (difficulty != ComputerDifficulty::Hard)
             return PostSelectionDecision::SelectAgain;
@@ -263,11 +268,21 @@ PostSelectionDecision decideAfterSelection(
             return PostSelectionDecision::SelectAgain;
     }
 
-    return shouldBank(game) ? PostSelectionDecision::Bank : PostSelectionDecision::Roll;
+    if (shouldBank(game)) {
+        if (collectBeforeBank && !remainingOptions.empty()) {
+            // The original plan has finished choosing dice for a possible roll.
+            // Claim free points now, without reconsidering a committed bank if
+            // collecting the last scoring die returns all six hot dice.
+            game.setComputerBankCommitted(true);
+            return PostSelectionDecision::SelectAgain;
+        }
+        return PostSelectionDecision::Bank;
+    }
+    return PostSelectionDecision::Roll;
 }
 
 TurnAction chooseTurnAction(
-    const GameManager& game,
+    GameManager& game,
     const bool waitingForRoll,
     const bool awaitingSelection,
     const std::vector<rules::GameOption>& remainingOptions)
@@ -308,11 +323,14 @@ bool shouldBank(const GameManager& game)
         return false;
 
     const ComputerDifficulty difficulty = currentDifficulty(game);
+    if (difficulty == ComputerDifficulty::Hard && !game.getRuleConfig().stealingEnabled() &&
+        game.getComputerBankCommitted())
+        return true;
     if (const std::optional<bool> endgameDecision = endgameBankDecision(game, difficulty); endgameDecision)
         return *endgameDecision;
 
     const Player& player = *game.getCurrentPlayer();
-    return player.getScore().getRoundScore() >= static_cast<std::uint64_t>(adjustedBankThreshold(game, currentPolicy(game)));
+    return static_cast<double>(player.getScore().getRoundScore()) >= adjustedBankThreshold(game, currentPolicy(game));
 }
 
 bool shouldAcceptSteal(const GameManager& game)

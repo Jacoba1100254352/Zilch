@@ -74,6 +74,9 @@ public:
 	void setTurnContinuationStatus(bool continueTurn, bool isBust = false);
 	[[nodiscard]] uint32_t getRollCountThisTurn() const { return rollCountThisTurn; }
 	void registerRoll();
+	// Per-turn computer intent survives scoring hot dice, but never a new roll.
+	[[nodiscard]] bool getComputerBankCommitted() const { return computerBankCommitted; }
+	void setComputerBankCommitted(const bool committed) { computerBankCommitted = committed; }
 	[[nodiscard]] bool getBustBonusUsedThisTurn() const { return bustBonusUsedThisTurn; }
 	void setBustBonusUsedThisTurn(const bool used) { bustBonusUsedThisTurn = used; }
 	void resetSavedMultiple();
@@ -118,6 +121,7 @@ private:
 	bool turnContinuationStatus;
 	bool selectionContinuationStatus;
 	bool bustPending{false};
+	bool computerBankCommitted{false};
 	bool hasRolledThisTurn{false};
 	bool bustBonusUsedThisTurn{false};
 	uint32_t rollCountThisTurn{0};

@@ -52,13 +52,28 @@ skipping the visual turn.
   game's dice values.
 
 The embedded standard Hard policy uses bank thresholds of
-`200, 1021, 1128, 1506, 2130, 2130` for one through six dice. Its utility values
+`200, 1021, 1128, 1506, 2130, 5000` for one through six dice. Once its existing
+selection plan decides to bank, it collects every remaining legal scoring
+option before banking, without taking another roll. That bank commitment
+survives hot dice. The ordinary six-dice decision is more willing to roll:
+with both banked totals at zero, it rolls again at 2,800 turn points. Existing
+opening and opponent-aware endgame decisions still take priority over cutoffs.
+
+Its utility values
 are score `1.0045`, remaining dice `36.0805`, hot dice `354.561`, multiple
 `91.9329`, lead `0`, trail `0.293194`, closing `0.193316`, and roll bias
-`136.066`. In a 500,000-game mirrored holdout (seed `2026091101`), this policy
-earned 58.5621% of match points against the baseline policy.
+`136.066`. Threshold adjustments retain full fractional precision, matching
+the web game and headless simulator.
 
-The Stealing Hard policy uses thresholds
+The refinement earned 51.5992% of match points against the previous actual Hard
+bot in a separate 500,000-game, seat-mirrored holdout (seed `1500000000`).
+The 95% paired interval was 51.5289% to 51.6695%. This is the best tested
+targeted refinement, not mathematically proven optimal play. Reproducible
+candidate, tuning, and holdout records live in the
+[web project's research folder](https://github.com/anderson-webops/zilch.jacobdanderson.net/tree/main/docs/research/hot-dice-2026-09).
+
+Stealing retains its separate policy and does not enable this new
+collect-before-bank behavior. Its Hard policy uses thresholds
 `313, 313, 1106, 1360, 1360, 1376` and utility values score `0.88553`, remaining
 dice `91.2663`, hot dice `229.628`, multiple `94.2546`, lead `0`, trail
 `0.187935`, closing `0.20764`, and roll bias `-26.2974`. Its practical minimum

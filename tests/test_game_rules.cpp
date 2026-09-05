@@ -209,7 +209,7 @@ void computerPoliciesMatchTheTestedProfiles()
            "easy should use a fixed 600-point banking target");
 
     const auto& hard = policyForDifficulty(ComputerDifficulty::Hard, false);
-    expect(hard.bankThresholdByDice == std::array<int, 7>{0, 200, 1021, 1128, 1506, 2130, 2130},
+    expect(hard.bankThresholdByDice == std::array<int, 7>{0, 200, 1021, 1128, 1506, 2130, 5000},
            "standard hard thresholds should match the simulator champion");
     expectEqual(hard.scoreWeight, 1.0045, "standard hard score weight should match the trained policy");
     expectEqual(hard.remainingDiceWeight, 36.0805, "standard hard dice weight should match the trained policy");
@@ -343,21 +343,184 @@ void hardSwitchesTheWholePolicyForStealing()
            "Stealing hard should bank at its lower four-dice threshold");
 }
 
-void hardBankThresholdMatchesSimulatorRounding()
+void hardBankThresholdKeepsFractionalPrecision()
 {
     GameManager game;
     prepareComputerTurn(game, ComputerDifficulty::Hard);
-    game.accessPlayers()[1].getScore().increasePermanentScore(2900);
-    game.getCurrentPlayer()->getScore().increaseRoundScore(1049);
-    game.getCurrentPlayer()->getDice().setNumDiceInPlay(1);
+    game.accessPlayers()[1].getScore().increasePermanentScore(1100);
+    game.getCurrentPlayer()->getScore().increaseRoundScore(1450);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(3);
     game.registerRoll();
     game.setSelectedOptionStatus(true);
 
     expect(!zilch::computer::shouldBank(game),
-           "hard should keep rolling one point below the simulator's truncated threshold");
-    game.getCurrentPlayer()->getScore().increaseRoundScore(1);
+           "1450 points must stay below the full-precision 1450.5134 threshold");
+    game.getCurrentPlayer()->getScore().increaseRoundScore(50);
     expect(zilch::computer::shouldBank(game),
-           "hard should bank exactly at the simulator's integer-adjusted threshold");
+           "hard should bank at the next reachable 50-point score above its threshold");
+}
+
+void hardRollsTheReported2800HotDiceState()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.registerRoll();
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.getCurrentPlayer()->getScore().setRoundScore(2800);
+    game.getCurrentPlayer()->getDice().setNumDiceInPlay(FULL_SET_OF_DICE);
+
+    expect(!game.isFinalRoundActive(), "the reported fresh game must not be in Final Chase");
+    expect(!zilch::computer::shouldBank(game), "Hard should roll six hot dice at 2800 with both totals zero");
+    expect(zilch::computer::chooseTurnAction(game, true, false, {}) == zilch::computer::TurnAction::Roll,
+           "the actual visual action planner should roll the reported hot-dice state");
+
+    game.accessRuleConfig().setStealingEnabled(true);
+    expect(zilch::computer::shouldBank(game), "the existing Stealing six-dice decision must still bank");
+}
+
+void hardCollectsGuaranteedPointsBeforeBanking()
+{
+    using zilch::computer::TurnAction;
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.registerRoll();
+    game.getCurrentPlayer()->getScore().setRoundScore(2700);
+    setDice(game, {{1, 2}, {5, 1}, {2, 1}, {3, 1}, {4, 1}});
+    zilch::rules::RuleManager rules(game.getRuleConfig());
+    auto options = rules.evaluate(game);
+    rules.apply(game, options[zilch::computer::chooseOption(game, options)]);
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), 2800U,
+                "the original rolling plan should first select one scoring one");
+
+    options = rules.evaluate(game);
+    expect(zilch::computer::chooseTurnAction(game, false, true, options) == TurnAction::SelectOption,
+           "a banking decision should collect the unclaimed guaranteed points first");
+    expect(game.getComputerBankCommitted(), "collection must explicitly commit to banking");
+    for (int action = 0; action < 2; ++action) {
+        options = rules.evaluate(game);
+        rules.apply(game, options[zilch::computer::chooseOption(game, options)]);
+        options = rules.evaluate(game);
+        expect(zilch::computer::chooseTurnAction(game, false, true, options) ==
+                   (options.empty() ? TurnAction::Bank : TurnAction::SelectOption),
+               "the collector should finish the scoring options then bank without another roll");
+    }
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), 2950U,
+                "Hard must bank 2950 rather than leave 150 guaranteed points behind");
+    game.endTurnAndBank();
+    expectEqual(game.getCurrentPlayer()->getScore().getPermanentScore(), 2950U,
+                "the complete collected score should reach the scoreboard");
+    expect(!game.getComputerBankCommitted(), "banking should clear the per-turn commitment");
+}
+
+void hardBankCommitmentSurvivesHotDice()
+{
+    using zilch::computer::PostSelectionDecision;
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.getCurrentPlayer()->getScore().setRoundScore(2800);
+    setDice(game, {{1, 1}, {5, 1}});
+    zilch::rules::RuleManager rules(game.getRuleConfig());
+    auto options = rules.evaluate(game);
+    expect(zilch::computer::decideAfterSelection(game, options) == PostSelectionDecision::SelectAgain,
+           "the two-dice bank plan should begin collecting both guaranteed singles");
+    expect(game.getComputerBankCommitted(), "the original two-dice decision must be remembered");
+    expectEqual(options[zilch::computer::chooseOption(game, options)].pointsAwarded, 100U,
+                "bank collection should take the highest-scoring remaining option");
+    for (int action = 0; action < 2; ++action) {
+        options = rules.evaluate(game);
+        rules.apply(game, options[zilch::computer::chooseOption(game, options)]);
+    }
+    expectEqual(game.getCurrentPlayer()->getDice().getNumDiceInPlay(), FULL_SET_OF_DICE,
+                "collecting every scoring die should reset to six hot dice");
+    expect(game.getComputerBankCommitted(), "hot dice must not clear a bank commitment");
+    expectEqual(game.getCurrentPlayer()->getScore().getRoundScore(), 2950U,
+                "the collector should include both singles");
+    expect(zilch::computer::chooseTurnAction(game, true, false, {}) == zilch::computer::TurnAction::Bank,
+           "the UI's hot-dice waiting state must bank rather than apply the new six-dice cutoff");
+}
+
+void hardCollectsBeforeImmediateWinAndFinalChaseBank()
+{
+    for (const bool finalChase : {false, true}) {
+        GameManager game;
+        prepareComputerTurn(game, ComputerDifficulty::Hard);
+        if (finalChase) {
+            game.getCurrentPlayer()->getScore().increasePermanentScore(4500);
+            game.accessPlayers()[1].getScore().increasePermanentScore(5200);
+            game.startFinalRound();
+        } else {
+            game.accessRuleConfig().setFinalChaseEnabled(false);
+        }
+        game.registerRoll();
+        game.getCurrentPlayer()->getScore().setRoundScore(finalChase ? 600 : 4900);
+        setDice(game, {{1, 2}, {5, 1}, {2, 1}, {3, 1}, {4, 1}});
+        zilch::rules::RuleManager rules(game.getRuleConfig());
+        auto options = rules.evaluate(game);
+        rules.apply(game, options[zilch::computer::chooseOption(game, options)]);
+        for (int action = 0; action < 2; ++action) {
+            options = rules.evaluate(game);
+            expect(zilch::computer::decideAfterSelection(game, options) ==
+                       zilch::computer::PostSelectionDecision::SelectAgain,
+                   "a winning bank should collect free points without rolling again");
+            expect(game.getComputerBankCommitted(), "winning bank intent must be committed");
+            rules.apply(game, options[zilch::computer::chooseOption(game, options)]);
+        }
+        expect(zilch::computer::decideAfterSelection(game, rules.evaluate(game)) ==
+                   zilch::computer::PostSelectionDecision::Bank,
+               "the final action must remain a bank after collecting winning points");
+        game.endTurnAndBank();
+        expectEqual(game.getCurrentPlayer()->getScore().getPermanentScore(), finalChase ? 5350U : 5150U,
+                    "a winning bank should include every guaranteed point");
+    }
+}
+
+void computerBankCommitmentResetsAtTurnBoundaries()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.setComputerBankCommitted(true);
+    game.registerRoll();
+    expect(!game.getComputerBankCommitted(), "an actual new roll must clear stale bank intent");
+    game.setComputerBankCommitted(true);
+    game.setTurnContinuationStatus(false, true);
+    expect(!game.getComputerBankCommitted(), "a bust must clear bank intent");
+    game.setComputerBankCommitted(true);
+    game.startTurn(0);
+    expect(!game.getComputerBankCommitted(), "starting a turn must clear bank intent");
+    game.setComputerBankCommitted(true);
+    game.setTurnContinuationStatus(false);
+    expect(!game.getComputerBankCommitted(), "a canceled turn must clear bank intent");
+    game.setComputerBankCommitted(true);
+    game.switchToNextPlayer();
+    expect(!game.getComputerBankCommitted(), "switching players must clear bank intent");
+    game.setComputerBankCommitted(true);
+    game.setPlayers({"New player"});
+    expect(!game.getComputerBankCommitted(), "creating a new game must clear bank intent");
+
+    GameManager otherGame;
+    prepareComputerTurn(otherGame, ComputerDifficulty::Hard);
+    game.setComputerBankCommitted(true);
+    expect(!otherGame.getComputerBankCommitted(), "separate games must never share computer intent");
+}
+
+void stealingHardDoesNotUseBankCollector()
+{
+    GameManager game;
+    prepareComputerTurn(game, ComputerDifficulty::Hard);
+    game.accessRuleConfig().setStealingEnabled(true);
+    game.registerRoll();
+    game.setSelectedOptionStatus(true);
+    game.getCurrentPlayer()->getScore().setRoundScore(2800);
+    setDice(game, {{5, 1}, {2, 1}, {3, 1}, {4, 1}, {6, 1}});
+    zilch::rules::RuleManager rules(game.getRuleConfig());
+    const auto options = rules.evaluate(game);
+    expect(zilch::computer::decideAfterSelection(game, options) ==
+               zilch::computer::PostSelectionDecision::Bank,
+           "Stealing Hard must retain its bank with an unclaimed weak scoring die");
+    expect(!game.getComputerBankCommitted(), "Stealing must not enable the new collector");
 }
 
 void mediumUsesOpponentAwareFinishDecisions()
@@ -1254,7 +1417,13 @@ int main()
     runTest("easyBanksAtItsFixedThreshold", easyBanksAtItsFixedThreshold);
     runTest("hardCanPreserveAWeakScoringDieForTheReroll", hardCanPreserveAWeakScoringDieForTheReroll);
     runTest("hardSwitchesTheWholePolicyForStealing", hardSwitchesTheWholePolicyForStealing);
-    runTest("hardBankThresholdMatchesSimulatorRounding", hardBankThresholdMatchesSimulatorRounding);
+    runTest("hardBankThresholdKeepsFractionalPrecision", hardBankThresholdKeepsFractionalPrecision);
+    runTest("hardRollsTheReported2800HotDiceState", hardRollsTheReported2800HotDiceState);
+    runTest("hardCollectsGuaranteedPointsBeforeBanking", hardCollectsGuaranteedPointsBeforeBanking);
+    runTest("hardBankCommitmentSurvivesHotDice", hardBankCommitmentSurvivesHotDice);
+    runTest("hardCollectsBeforeImmediateWinAndFinalChaseBank", hardCollectsBeforeImmediateWinAndFinalChaseBank);
+    runTest("computerBankCommitmentResetsAtTurnBoundaries", computerBankCommitmentResetsAtTurnBoundaries);
+    runTest("stealingHardDoesNotUseBankCollector", stealingHardDoesNotUseBankCollector);
     runTest("mediumUsesOpponentAwareFinishDecisions", mediumUsesOpponentAwareFinishDecisions);
     runTest("computersTakeAReachableFinalChaseWin", computersTakeAReachableFinalChaseWin);
     runTest("hardUsesTheStealingSpecificAcceptanceCurve", hardUsesTheStealingSpecificAcceptanceCurve);

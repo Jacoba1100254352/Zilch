@@ -49,11 +49,11 @@ struct Policy {
     const std::vector<rules::GameOption>& options
 );
 [[nodiscard]] PostSelectionDecision decideAfterSelection(
-    const GameManager& game,
+    GameManager& game,
     const std::vector<rules::GameOption>& remainingOptions
 );
 [[nodiscard]] TurnAction chooseTurnAction(
-    const GameManager& game,
+    GameManager& game,
     bool waitingForRoll,
     bool awaitingSelection,
     const std::vector<rules::GameOption>& remainingOptions

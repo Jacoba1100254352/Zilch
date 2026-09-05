@@ -25,6 +25,7 @@ void GameManager::initializeRollCycle(const bool resetTurnFlags)
 
     // Only reset roll/selection state when starting a brand-new turn.
     if (resetTurnFlags) {
+        computerBankCommitted = false;
         hasRolledThisTurn = false;
         selectedOptionStatus = false;
         valueOfChosenMultiple = 0;
@@ -80,6 +81,7 @@ void GameManager::setPlayers(const std::vector<std::string>& playerNames)
  */
 void GameManager::setPlayerSetups(const std::vector<PlayerSetup>& playerSetups)
 {
+    computerBankCommitted = false;
     endStealChain();
 
     // Clear existing players and reserve space.
@@ -128,6 +130,7 @@ void GameManager::setScoreLimit(const uint32_t limit)
  */
 void GameManager::startTurn(const size_t playerIndex)
 {
+    computerBankCommitted = false;
     // Ensure there are players to start a turn.
     if (players.empty()) return;
     if (!ruleConfig.hasScoringRuleEnabled())
@@ -154,6 +157,7 @@ void GameManager::startTurn(const size_t playerIndex)
  */
 void GameManager::registerRoll()
 {
+    computerBankCommitted = false;
     hasRolledThisTurn = true;
     ++rollCountThisTurn;
 }
@@ -223,6 +227,7 @@ void GameManager::endTurnAndBank()
     if (!canBankCurrentScore())
         return;
 
+    computerBankCommitted = false;
     // Capture a stealable continuation before clearing the completed turn.
     bustPending = false;
     Score& score = currentPlayer->getScore();
@@ -365,6 +370,7 @@ void GameManager::endStealChain()
  */
 void GameManager::switchToNextPlayer()
 {
+    computerBankCommitted = false;
     // Advance to the next player in a circular manner.
     if (players.empty())
         return;
@@ -475,6 +481,8 @@ bool GameManager::getTurnContinuationStatus() const
  */
 void GameManager::setTurnContinuationStatus(const bool continueTurn, const bool isBust)
 {
+    if (!continueTurn || isBust)
+        computerBankCommitted = false;
     // Handle bust scenario.
     if (isBust) {
         turnContinuationStatus = continueTurn;
