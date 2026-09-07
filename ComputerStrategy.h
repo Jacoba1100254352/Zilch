@@ -45,7 +45,7 @@ struct Policy {
 [[nodiscard]] std::string_view difficultyName(ComputerDifficulty difficulty);
 [[nodiscard]] const Policy& policyForDifficulty(ComputerDifficulty difficulty, bool stealingEnabled);
 [[nodiscard]] std::size_t chooseOption(
-    const GameManager& game,
+    GameManager& game,
     const std::vector<rules::GameOption>& options
 );
 [[nodiscard]] PostSelectionDecision decideAfterSelection(

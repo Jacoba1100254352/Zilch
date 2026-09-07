@@ -46,16 +46,28 @@ skipping the visual turn.
   finish. It seeks a buffer when a close opponent will receive a Final Chase,
   may bank just short of the Winning Score when it already has a safe lead, and
   keeps rolling when it still needs to catch the Final Chase leader.
-- Hard chooses scoring combinations and bank timing with the trained utility
-  policy from Computers vs Zilch. When Stealing is enabled it switches the
+- Hard chooses scoring combinations and bank timing with the tested policy
+  from Computers vs Zilch. When Stealing is enabled it switches the
   complete policy, including steal acceptance, rather than reusing the standard
   game's dice values.
 
 The embedded standard Hard policy uses bank thresholds of
-`200, 1021, 1128, 1506, 2130, 5000` for one through six dice. Once its existing
-selection plan decides to bank, it collects every remaining legal scoring
-option before banking, without taking another roll. That bank commitment
-survives hot dice. The ordinary six-dice decision is more willing to roll:
+`200, 1021, 1128, 1506, 2130, 5000` for ordinary decisions with one through six
+dice. On a roll with an available multiple or an already saved chain, it plans
+the scoring selections and bank-or-roll action together. Each legal branch is
+scored by the real `RuleManager`; its next-roll score and bust probability are
+enumerated exactly. The chain cutoff uses the frozen weight-one symmetric
+blend, then the existing opponent and endgame adjustments. Unclaimed scoring
+dice are included in alternative bank paths, so their value is not subtracted
+twice. For example, a low-risk `6,6,6,5,2,3` roll keeps just the sixes and rolls
+three dice, while more points at risk can justify taking the five and banking.
+
+Outside multiple rolls, the existing greedy selection and collect-before-bank
+behavior remain in place. A guaranteed outright win is protected even if
+collecting another single is necessary. The selected plan is private to the
+game, survives hot dice and the UI's waiting-for-roll transition, and clears
+when a roll or turn actually begins or ends. The ordinary six-dice decision
+remains more willing to roll:
 with both banked totals at zero, it rolls again at 2,800 turn points. Existing
 opening and opponent-aware endgame decisions still take priority over cutoffs.
 
@@ -65,12 +77,24 @@ are score `1.0045`, remaining dice `36.0805`, hot dice `354.561`, multiple
 `136.066`. Threshold adjustments retain full fractional precision, matching
 the web game and headless simulator.
 
-The refinement earned 51.5992% of match points against the previous actual Hard
+The preceding hot-dice refinement earned 51.5992% of match points against its previous actual Hard
 bot in a separate 500,000-game, seat-mirrored holdout (seed `1500000000`).
-The 95% paired interval was 51.5289% to 51.6695%. This is the best tested
-targeted refinement, not mathematically proven optimal play. Reproducible
+The 95% paired interval was 51.5289% to 51.6695%. Reproducible
 candidate, tuning, and holdout records live in the
 [web project's research folder](https://github.com/anderson-webops/zilch.jacobdanderson.net/tree/main/docs/research/hot-dice-2026-09).
+
+The new chain-scoped policy earned 51.4544% of match points against that
+hot-dice-refined Hard in a fresh 500,000-game mirrored holdout. Its 95% paired
+interval was 51.3338% to 51.5750%. This is a tested improvement, not proof of
+optimal play or a result for every rule variant. The multiple-selection study
+and candidate provenance are retained in the
+[web research records](https://github.com/anderson-webops/zilch.jacobdanderson.net/tree/main/docs/research/multiple-selection-2026-09).
+
+Saved multiples extend with every matching die, including three matching dice
+at once. A saved 600-point six chain plus three sixes adds 4,200 points. Scoring
+all remaining dice clears that saved chain immediately, before another roll.
+Look-ahead copies rebind the active-player pointer to their own player storage,
+so evaluation never scores or removes dice from the live game.
 
 Stealing retains its separate policy and does not enable this new
 collect-before-bank behavior. Its Hard policy uses thresholds
@@ -282,3 +306,27 @@ Run tests:
 - `make test`
 
 The `ZilchRulesTests` target covers core dice invariants, structured rule options, scoring combinations, rule toggles, bust handling, banking and stealing gates, steal chaining and termination, final-round and winner state, state-machine descriptions, resource path resolution, mixed human/computer setup, exact policy constants and threshold rounding, scoring selection, computer action planning, opponent-aware finish decisions, and Stealing-specific acceptance thresholds.
+
+`ZilchChainStrategyTests` covers points-at-risk, multiple value, opponent
+position, opening requirements, strict final wins, three-die extensions,
+hot-dice planning, non-chain fallback, isolated copy construction/assignment,
+and intent resets at every roll/turn boundary.
+
+### Cross-implementation decision probe
+
+`ZilchDecisionProbe` accepts newline-separated checkpoints on standard input
+and emits one JSON object per line. It uses the production Hard policy and the
+actual paced action planner, without opening a window or rolling random dice.
+The 12 whitespace-separated fields match the headless probe:
+
+```text
+turnScore ownScore opponentScore target opening stealing finalChase finalChaseActive ties sets diceCsv savedScoresCsv
+0 0 0 5000 1000 0 1 0 1 1 6,6,6,5,2,3 0,0,0,0,0,0
+```
+
+Boolean fields accept `0`/`1` or `false`/`true`. The six saved scores are ordered
+by face; at most one may be nonzero, as two simultaneous saved chains are not
+reachable before all six dice reset. Output fields are `line`,
+`selected_counts`, `action`, `score_gain`, `projected_turn_score`, `next_dice`,
+and `can_bank`. `--self-test` is also part of CTest. Build in a fresh temporary
+directory outside the Dropbox checkout to keep generated files separate.

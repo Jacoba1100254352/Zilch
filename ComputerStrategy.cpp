@@ -4,9 +4,14 @@
 #include "GameManager.h"
 #include "RuleConfig.h"
 #include "Score.h"
+#include "rules/RuleManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <functional>
+#include <limits>
+#include <map>
 #include <optional>
 #include <stdexcept>
 
@@ -125,6 +130,151 @@ std::uint32_t maxOpponentScore(const GameManager& game)
     return maximum;
 }
 
+bool usesStandardHard(const GameManager& game)
+{
+    return currentDifficulty(game) == ComputerDifficulty::Hard && !game.getRuleConfig().stealingEnabled();
+}
+
+struct GuaranteedCollection {
+    std::uint32_t scoreGain{0};
+    std::size_t firstOption{0};
+};
+
+GuaranteedCollection maximumGuaranteedCollection(const GameManager& source)
+{
+    const rules::RuleManager scorer(source.getRuleConfig());
+    const auto options = scorer.evaluate(source);
+    GuaranteedCollection best;
+    for (std::size_t index = 0; index < options.size(); ++index) {
+        auto branch = source;
+        scorer.apply(branch, options[index]);
+        const auto gain = options[index].pointsAwarded + maximumGuaranteedCollection(branch).scoreGain;
+        if (gain > best.scoreGain)
+            best = {gain, index};
+    }
+    return best;
+}
+
+struct RollEnumerationKey {
+    std::uint16_t diceCount{0};
+    std::uint16_t savedFace{0};
+    std::uint32_t savedScore{0};
+    std::array<bool, 4> scoringRules{};
+    auto operator<=>(const RollEnumerationKey&) const = default;
+};
+
+struct RollEnumeration {
+    std::uint32_t outcomes{0};
+    std::uint32_t busts{0};
+    std::uint64_t totalNewScore{0};
+};
+
+RollEnumerationKey enumerationKey(const GameManager& game)
+{
+    const auto& rules = game.getRuleConfig();
+    return {game.getCurrentPlayer()->getDice().getNumDiceInPlay(), game.getValueOfChosenMultiple(),
+            game.getCurrentPlayer()->getScore().getScoreFromMultiples(),
+            {rules.straightEnabled(), rules.threePairsEnabled(), rules.multiplesEnabled(), rules.singlesEnabled()}};
+}
+
+RollEnumeration enumerateRoll(const GameManager& source, const bool includeScore)
+{
+    const auto count = source.getCurrentPlayer()->getDice().getNumDiceInPlay();
+    if (count < 1 || count > 6)
+        throw std::logic_error("A next-roll estimate requires one through six dice.");
+    RollEnumeration result{1, 0, 0};
+    for (std::uint16_t die = 0; die < count; ++die)
+        result.outcomes *= 6;
+    const rules::RuleManager scorer(source.getRuleConfig());
+    for (std::uint32_t outcome = 0; outcome < result.outcomes; ++outcome) {
+        auto game = source;
+        game.getCurrentPlayer()->getScore().setRoundScore(0);
+        auto& dice = game.getCurrentPlayer()->getDice();
+        dice.diceSetMap.clear();
+        auto encoded = outcome;
+        for (std::uint16_t die = 0; die < count; ++die) {
+            ++dice.diceSetMap[static_cast<std::uint16_t>(encoded % 6 + 1)];
+            encoded /= 6;
+        }
+        dice.calculateMultipleAvailability();
+        if (scorer.evaluate(game).empty())
+            ++result.busts;
+        else if (includeScore)
+            result.totalNewScore += maximumGuaranteedCollection(game).scoreGain;
+    }
+    return result;
+}
+
+std::optional<RollEnumeration> enumerateChain(const GameManager& game)
+{
+    const auto key = enumerationKey(game);
+    if (key.diceCount < 1 || key.diceCount > 3 || key.savedFace == 0 || key.savedScore == 0 ||
+        !game.getRuleConfig().multiplesEnabled())
+        return std::nullopt;
+    // Only scoring state enters the cache. Current unclaimed dice, banked
+    // totals, opening score, and Final Chase do not alter next-roll scoring.
+    thread_local std::map<RollEnumerationKey, RollEnumeration> cache;
+    if (const auto found = cache.find(key); found != cache.end())
+        return found->second;
+    const auto result = enumerateRoll(game, true);
+    cache.emplace(key, result);
+    return result;
+}
+
+double nextRollBustProbability(const GameManager& game)
+{
+    if (const auto chain = enumerateChain(game))
+        return static_cast<double>(chain->busts) / chain->outcomes;
+    const auto key = enumerationKey(game);
+    thread_local std::map<RollEnumerationKey, double> cache;
+    if (const auto found = cache.find(key); found != cache.end())
+        return found->second;
+    const auto enumeration = enumerateRoll(game, false);
+    const auto probability = static_cast<double>(enumeration.busts) / enumeration.outcomes;
+    cache.emplace(key, probability);
+    return probability;
+}
+
+bool isGuaranteedOutrightWin(const GameManager& game)
+{
+    if (!game.canBankCurrentScore())
+        return false;
+    const auto& score = game.getCurrentPlayer()->getScore();
+    const auto total = static_cast<std::uint64_t>(score.getPermanentScore()) + score.getRoundScore();
+    if (game.isFinalRoundActive() && game.willEndAfterCurrentTurn(game.getPlayers().size()))
+        return total > maxOpponentScore(game);
+    if (!game.getRuleConfig().finalChaseEnabled() || game.getPlayers().size() == 1)
+        return total >= score.getScoreLimit();
+    return false;
+}
+
+bool canSecureWinByCollecting(const GameManager& source)
+{
+    if (!usesStandardHard(source))
+        return false;
+    const bool finalTurn = source.isFinalRoundActive() && source.willEndAfterCurrentTurn(source.getPlayers().size());
+    const bool immediateWin = !source.getRuleConfig().finalChaseEnabled() || source.getPlayers().size() == 1;
+    if (!finalTurn && !immediateWin)
+        return false;
+    auto game = source;
+    const rules::RuleManager scorer(game.getRuleConfig());
+    for (;;) {
+        const auto best = maximumGuaranteedCollection(game);
+        if (best.scoreGain == 0)
+            break;
+        scorer.apply(game, scorer.evaluate(game)[best.firstOption]);
+    }
+    return isGuaranteedOutrightWin(game);
+}
+
+void prepareSafeFinish(GameManager& game)
+{
+    if (!game.getComputerBankCommitted() && canSecureWinByCollecting(game)) {
+        game.setComputerBankCommitted(true);
+        game.setComputerSafeFinishCommitted(true);
+    }
+}
+
 std::optional<bool> endgameBankDecision(const GameManager& game, const ComputerDifficulty difficulty)
 {
     const Player* player = game.getCurrentPlayer();
@@ -172,11 +322,19 @@ std::optional<bool> endgameBankDecision(const GameManager& game, const ComputerD
     return std::nullopt;
 }
 
-double adjustedBankThreshold(const GameManager& game, const Policy& policy)
+double adjustedBankThreshold(const GameManager& game, const Policy& policy, const bool chainAware = false)
 {
     const Player& player = *game.getCurrentPlayer();
     const std::uint16_t dice = player.getDice().getNumDiceInPlay();
     double threshold = policy.bankThresholdByDice.at(std::min<std::size_t>(dice, FULL_SET_OF_DICE));
+    if (chainAware) {
+        if (const auto chain = enumerateChain(game); chain && chain->busts != 0) {
+            // Frozen chain-scoped candidate: weight 1, symmetric blend. The
+            // joint search already includes unclaimed points in bank paths,
+            // so its chain crossover is E/p, not (E - unclaimed score)/p.
+            threshold += static_cast<double>(chain->totalNewScore) / chain->busts - threshold;
+        }
+    }
     const std::int64_t lead = static_cast<std::int64_t>(player.getScore().getPermanentScore()) - maxOpponentScore(game);
 
     if (lead > 0)
@@ -191,6 +349,80 @@ double adjustedBankThreshold(const GameManager& game, const Policy& policy)
     threshold -= static_cast<double>(closingWindow) * policy.closingFactor;
 
     return std::clamp(threshold, 200.0, static_cast<double>(player.getScore().getScoreLimit()));
+}
+
+bool usesJointSelection(const GameManager& game)
+{
+    if (!usesStandardHard(game))
+        return false;
+    // A selected hot-dice path remains committed after its chain is cleared.
+    if (game.getComputerJointBankDecision().has_value())
+        return true;
+    if (!game.getRuleConfig().multiplesEnabled())
+        return false;
+    if (game.getValueOfChosenMultiple() != 0)
+        return true;
+    const auto options = rules::RuleManager(game.getRuleConfig()).evaluate(game);
+    return std::any_of(options.begin(), options.end(), [](const rules::GameOption& option) {
+        return option.ruleType == rules::RuleType::Multiple || option.ruleType == rules::RuleType::AddMultiple;
+    });
+}
+
+void prepareJointSelection(GameManager& game, const bool requireSelection)
+{
+    struct Plan {
+        std::vector<std::size_t> selections;
+        bool bank{false};
+        double utility{-std::numeric_limits<double>::infinity()};
+        std::uint32_t roundScore{0};
+        std::uint16_t nextDice{0};
+        bool outrightWin{false};
+        bool valid{false};
+    };
+    Plan best;
+    const auto consider = [&](Plan candidate) {
+        const bool betterScore = candidate.utility > best.utility + 1e-9;
+        const bool sameScore = std::abs(candidate.utility - best.utility) <= 1e-9;
+        const bool betterTie = sameScore &&
+            ((candidate.bank && !best.bank) ||
+             (candidate.bank == best.bank &&
+              (candidate.roundScore > best.roundScore ||
+               (candidate.roundScore == best.roundScore && candidate.nextDice > best.nextDice))));
+        if (!best.valid || (candidate.outrightWin && !best.outrightWin) ||
+            (candidate.outrightWin == best.outrightWin && (betterScore || betterTie)))
+            best = std::move(candidate);
+    };
+    const rules::RuleManager scorer(game.getRuleConfig());
+    std::vector<std::size_t> path;
+    std::function<void(const GameManager&)> visit = [&](const GameManager& state) {
+        if (!requireSelection || !path.empty()) {
+            const bool canBank = state.canBankCurrentScore();
+            const auto endgame = canBank ? endgameBankDecision(state, ComputerDifficulty::Hard) : std::nullopt;
+            const auto& player = *state.getCurrentPlayer();
+            const auto points = player.getScore().getRoundScore();
+            const auto dice = player.getDice().getNumDiceInPlay();
+            const bool certainWin = isGuaranteedOutrightWin(state);
+            if (canBank && (certainWin || endgame != false))
+                consider({path, true, static_cast<double>(points), points, dice, certainWin, true});
+            if (!certainWin && endgame != true) {
+                const auto probability = nextRollBustProbability(state);
+                const auto utility = points + probability * (adjustedBankThreshold(state, currentPolicy(state), true) - points);
+                consider({path, false, utility, points, dice, false, true});
+            }
+        }
+        const auto options = scorer.evaluate(state);
+        for (std::size_t index = 0; index < options.size(); ++index) {
+            auto branch = state;
+            scorer.apply(branch, options[index]);
+            path.push_back(index);
+            visit(branch);
+            path.pop_back();
+        }
+    };
+    visit(game);
+    if (!best.valid)
+        throw std::logic_error("Joint planning requires a legal scoring selection or post-selection action.");
+    game.setComputerJointPlan(std::move(best.selections), best.bank);
 }
 
 }
@@ -215,10 +447,24 @@ const Policy& policyForDifficulty(const ComputerDifficulty difficulty, const boo
     return MEDIUM_POLICY;
 }
 
-std::size_t chooseOption(const GameManager& game, const std::vector<rules::GameOption>& options)
+std::size_t chooseOption(GameManager& game, const std::vector<rules::GameOption>& options)
 {
     if (options.empty())
         throw std::invalid_argument("A computer cannot choose from an empty scoring-option list.");
+
+    if (usesJointSelection(game)) {
+        if (!game.getComputerJointBankDecision().has_value())
+            prepareJointSelection(game, true);
+        auto& selections = game.accessComputerJointSelections();
+        if (selections.empty() || selections.front() >= options.size())
+            throw std::logic_error("Joint selection has no legal committed scoring option.");
+        const auto choice = selections.front();
+        selections.erase(selections.begin());
+        return choice;
+    }
+    prepareSafeFinish(game);
+    if (usesStandardHard(game) && game.getComputerSafeFinishCommitted())
+        return maximumGuaranteedCollection(game).firstOption;
 
     const ComputerDifficulty difficulty = currentDifficulty(game);
     std::size_t bestIndex = 0;
@@ -248,6 +494,16 @@ PostSelectionDecision decideAfterSelection(
     const std::vector<rules::GameOption>& remainingOptions)
 {
     const ComputerDifficulty difficulty = currentDifficulty(game);
+    if (usesJointSelection(game)) {
+        if (!game.getComputerJointBankDecision().has_value())
+            prepareJointSelection(game, false);
+        if (!game.getComputerJointSelections().empty())
+            return PostSelectionDecision::SelectAgain;
+        // Retain the terminal action until the actual roll/bank. The visual
+        // UI can enter waitingForRoll before asking for its next paced action.
+        return *game.getComputerJointBankDecision() ? PostSelectionDecision::Bank : PostSelectionDecision::Roll;
+    }
+    prepareSafeFinish(game);
     const bool collectBeforeBank = difficulty == ComputerDifficulty::Hard &&
                                    !game.getRuleConfig().stealingEnabled();
     if (collectBeforeBank && game.getComputerBankCommitted())
@@ -323,6 +579,13 @@ bool shouldBank(const GameManager& game)
         return false;
 
     const ComputerDifficulty difficulty = currentDifficulty(game);
+    if (usesStandardHard(game) && game.getComputerJointBankDecision().has_value())
+        return game.getComputerJointSelections().empty() && *game.getComputerJointBankDecision();
+    if (usesJointSelection(game)) {
+        auto plan = game;
+        prepareJointSelection(plan, false);
+        return plan.getComputerJointSelections().empty() && *plan.getComputerJointBankDecision();
+    }
     if (difficulty == ComputerDifficulty::Hard && !game.getRuleConfig().stealingEnabled() &&
         game.getComputerBankCommitted())
         return true;

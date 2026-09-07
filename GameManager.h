@@ -27,6 +27,9 @@ public:
 	// Constructor initializes member variables.
 	GameManager() : players({}), currentPlayer(nullptr), currentIndex(0), valueOfChosenMultiple(0), selectedOptionStatus(false),
 					turnContinuationStatus(true), selectionContinuationStatus(true) {}
+	// Look-ahead copies own their active player; never alias a live game's vector.
+	GameManager(const GameManager& other);
+	GameManager& operator=(const GameManager& other);
 
 	// Roll Cycle Management
 	void initializeRollCycle(bool resetTurnFlags);
@@ -77,6 +80,13 @@ public:
 	// Per-turn computer intent survives scoring hot dice, but never a new roll.
 	[[nodiscard]] bool getComputerBankCommitted() const { return computerBankCommitted; }
 	void setComputerBankCommitted(const bool committed) { computerBankCommitted = committed; }
+	[[nodiscard]] bool getComputerSafeFinishCommitted() const { return computerSafeFinishCommitted; }
+	void setComputerSafeFinishCommitted(const bool committed) { computerSafeFinishCommitted = committed; }
+	[[nodiscard]] const std::optional<bool>& getComputerJointBankDecision() const { return computerJointBankDecision; }
+	[[nodiscard]] const std::vector<std::size_t>& getComputerJointSelections() const { return computerJointSelections; }
+	[[nodiscard]] std::vector<std::size_t>& accessComputerJointSelections() { return computerJointSelections; }
+	void setComputerJointPlan(std::vector<std::size_t> selections, bool bank);
+	void clearComputerIntent();
 	[[nodiscard]] bool getBustBonusUsedThisTurn() const { return bustBonusUsedThisTurn; }
 	void setBustBonusUsedThisTurn(const bool used) { bustBonusUsedThisTurn = used; }
 	void resetSavedMultiple();
@@ -122,6 +132,9 @@ private:
 	bool selectionContinuationStatus;
 	bool bustPending{false};
 	bool computerBankCommitted{false};
+	bool computerSafeFinishCommitted{false};
+	std::optional<bool> computerJointBankDecision;
+	std::vector<std::size_t> computerJointSelections;
 	bool hasRolledThisTurn{false};
 	bool bustBonusUsedThisTurn{false};
 	uint32_t rollCountThisTurn{0};

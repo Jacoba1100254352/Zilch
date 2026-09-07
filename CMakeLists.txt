@@ -24,6 +24,20 @@ endif()
 find_package(SFML 2.6 REQUIRED COMPONENTS graphics window system)
 find_package(OpenMP)
 
+add_executable(ZilchDecisionProbe
+        research/decision_probe.cpp
+        ComputerStrategy.cpp
+        Dice.cpp
+        rules/RuleManager.cpp
+        GameManager.cpp
+        GameStateMachine.cpp)
+target_include_directories(ZilchDecisionProbe PRIVATE ${PROJECT_SOURCE_DIR})
+if(MSVC)
+    target_compile_options(ZilchDecisionProbe PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(ZilchDecisionProbe PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_executable(Zilch
         main.cpp
         ComputerStrategy.cpp
@@ -65,6 +79,21 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(ZilchChainStrategyTests
+            tests/test_chain_strategy.cpp
+            ComputerStrategy.cpp
+            Dice.cpp
+            rules/RuleManager.cpp
+            GameManager.cpp
+            GameStateMachine.cpp)
+    target_include_directories(ZilchChainStrategyTests PRIVATE ${PROJECT_SOURCE_DIR})
+    if(MSVC)
+        target_compile_options(ZilchChainStrategyTests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(ZilchChainStrategyTests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME ZilchChainStrategyTests COMMAND ZilchChainStrategyTests)
+
     add_executable(ZilchRulesTests
             tests/test_game_rules.cpp
             ComputerStrategy.cpp
@@ -84,4 +113,5 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ZilchRulesTests COMMAND ZilchRulesTests)
+    add_test(NAME ZilchDecisionProbeSmoke COMMAND ZilchDecisionProbe --self-test)
 endif()

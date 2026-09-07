@@ -892,7 +892,7 @@ void fourOnesDoubleBaseMultipleAndHotDice()
 
     const Score& score = game.getCurrentPlayer()->getScore();
     expectEqual(score.getRoundScore(), static_cast<uint32_t>(2000), "four ones should double the 1000-point base");
-    expectEqual(score.getScoreFromMultiples(), static_cast<uint16_t>(2000), "saved multiple should retain the scaled one score");
+    expectEqual(score.getScoreFromMultiples(), static_cast<uint32_t>(0), "hot dice should clear the saved multiple immediately");
     expectEqual(dice.getNumDiceInPlay(), static_cast<uint16_t>(FULL_SET_OF_DICE), "scoring every die should reset to hot dice");
     expect(dice.diceSetMap.empty(), "all ones should be consumed");
 }

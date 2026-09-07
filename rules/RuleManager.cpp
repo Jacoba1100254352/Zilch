@@ -86,6 +86,11 @@ public:
         for (const auto& [dieValue, count] : context.dice.diceSetMap) {
             if (count < 3)
                 continue;
+            // An already saved multiple is extended even if all three of the
+            // remaining dice match. Do not offer a competing fresh triple.
+            if (context.game.getValueOfChosenMultiple() == dieValue &&
+                context.score.getScoreFromMultiples() >= 200)
+                continue;
 
             const uint32_t score = multipleScore(dieValue, count);
             options.push_back({
@@ -113,7 +118,7 @@ public:
 
         const uint16_t dieValue = context.game.getValueOfChosenMultiple();
         const auto iter = context.dice.diceSetMap.find(dieValue);
-        if (iter == context.dice.diceSetMap.end() || iter->second == 0 || iter->second >= 3)
+        if (iter == context.dice.diceSetMap.end() || iter->second == 0)
             return {};
 
         const uint32_t previousScore = context.score.getScoreFromMultiples();

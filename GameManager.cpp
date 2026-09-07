@@ -12,6 +12,55 @@ This file contains the implementation of the GameManager class, which manages th
 
 #include <algorithm>
 #include <stdexcept>
+#include <utility>
+
+GameManager::GameManager(const GameManager& other) : GameManager()
+{
+    *this = other;
+}
+
+GameManager& GameManager::operator=(const GameManager& other)
+{
+    if (this == &other)
+        return *this;
+    players = other.players;
+    currentIndex = other.currentIndex;
+    currentPlayer = other.currentPlayer && currentIndex < players.size() ? &players[currentIndex] : nullptr;
+    valueOfChosenMultiple = other.valueOfChosenMultiple;
+    selectedOptionStatus = other.selectedOptionStatus;
+    turnContinuationStatus = other.turnContinuationStatus;
+    selectionContinuationStatus = other.selectionContinuationStatus;
+    bustPending = other.bustPending;
+    computerBankCommitted = other.computerBankCommitted;
+    computerSafeFinishCommitted = other.computerSafeFinishCommitted;
+    computerJointBankDecision = other.computerJointBankDecision;
+    computerJointSelections = other.computerJointSelections;
+    hasRolledThisTurn = other.hasRolledThisTurn;
+    bustBonusUsedThisTurn = other.bustBonusUsedThisTurn;
+    rollCountThisTurn = other.rollCountThisTurn;
+    finalRoundActive = other.finalRoundActive;
+    finalRoundStarterIndex = other.finalRoundStarterIndex;
+    finalRoundLeaderIndex = other.finalRoundLeaderIndex;
+    stealOffer = other.stealOffer;
+    stealContinuationActive = other.stealContinuationActive;
+    ruleConfig = other.ruleConfig;
+    stateMachine = other.stateMachine;
+    return *this;
+}
+
+void GameManager::setComputerJointPlan(std::vector<std::size_t> selections, const bool bank)
+{
+    computerJointSelections = std::move(selections);
+    computerJointBankDecision = bank;
+}
+
+void GameManager::clearComputerIntent()
+{
+    computerBankCommitted = false;
+    computerSafeFinishCommitted = false;
+    computerJointSelections.clear();
+    computerJointBankDecision.reset();
+}
 
 /**
  * @brief Initializes the roll cycle by resetting relevant statuses and scores.
@@ -25,7 +74,7 @@ void GameManager::initializeRollCycle(const bool resetTurnFlags)
 
     // Only reset roll/selection state when starting a brand-new turn.
     if (resetTurnFlags) {
-        computerBankCommitted = false;
+        clearComputerIntent();
         hasRolledThisTurn = false;
         selectedOptionStatus = false;
         valueOfChosenMultiple = 0;
@@ -56,8 +105,12 @@ void GameManager::manageDiceCount(uint16_t numOfDice)
     currentPlayer->getDice().setNumDiceInPlay(numOfDice);
 
     // If resetting to full set, initialize roll cycle.
-    if (numOfDice == FULL_SET_OF_DICE)
+    if (numOfDice == FULL_SET_OF_DICE) {
+        // Hot dice end the saved multiple immediately, including in look-ahead
+        // before the UI has performed its next animated roll.
+        resetSavedMultiple();
         initializeRollCycle(false);
+    }
 }
 
 /**
@@ -81,7 +134,7 @@ void GameManager::setPlayers(const std::vector<std::string>& playerNames)
  */
 void GameManager::setPlayerSetups(const std::vector<PlayerSetup>& playerSetups)
 {
-    computerBankCommitted = false;
+    clearComputerIntent();
     endStealChain();
 
     // Clear existing players and reserve space.
@@ -130,7 +183,7 @@ void GameManager::setScoreLimit(const uint32_t limit)
  */
 void GameManager::startTurn(const size_t playerIndex)
 {
-    computerBankCommitted = false;
+    clearComputerIntent();
     // Ensure there are players to start a turn.
     if (players.empty()) return;
     if (!ruleConfig.hasScoringRuleEnabled())
@@ -157,7 +210,7 @@ void GameManager::startTurn(const size_t playerIndex)
  */
 void GameManager::registerRoll()
 {
-    computerBankCommitted = false;
+    clearComputerIntent();
     hasRolledThisTurn = true;
     ++rollCountThisTurn;
 }
@@ -227,7 +280,7 @@ void GameManager::endTurnAndBank()
     if (!canBankCurrentScore())
         return;
 
-    computerBankCommitted = false;
+    clearComputerIntent();
     // Capture a stealable continuation before clearing the completed turn.
     bustPending = false;
     Score& score = currentPlayer->getScore();
@@ -370,7 +423,7 @@ void GameManager::endStealChain()
  */
 void GameManager::switchToNextPlayer()
 {
-    computerBankCommitted = false;
+    clearComputerIntent();
     // Advance to the next player in a circular manner.
     if (players.empty())
         return;
@@ -482,7 +535,7 @@ bool GameManager::getTurnContinuationStatus() const
 void GameManager::setTurnContinuationStatus(const bool continueTurn, const bool isBust)
 {
     if (!continueTurn || isBust)
-        computerBankCommitted = false;
+        clearComputerIntent();
     // Handle bust scenario.
     if (isBust) {
         turnContinuationStatus = continueTurn;
